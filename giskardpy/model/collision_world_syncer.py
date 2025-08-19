@@ -81,6 +81,9 @@ class CollisionWorldSynchronizer:
     def monitor_link_for_external(self, body: Body, idx: int):
         self.external_monitored_links[body] = max(idx, self.external_monitored_links.get(body, 0))
 
+    def reset_cache(self):
+        self.collision_detector.reset_cache()
+
     def get_external_collision_symbol(self) -> List[cas.Symbol]:
         symbols = []
         for body, max_idx in self.external_monitored_links.items():
