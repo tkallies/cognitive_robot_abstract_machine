@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from textwrap import fill
-from typing import Optional, List, Dict, Tuple
-from typing_extensions import Any
+from typing_extensions import Optional, List, Dict, Tuple, TYPE_CHECKING, Any
 
 import igraph as ig
 import matplotlib as mpl
@@ -12,7 +11,10 @@ from matplotlib import pyplot as plt
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 from matplotlib.path import Path
 
-from .rxnode import RWXNode, ColorLegend
+from .utils import ColorLegend
+
+if TYPE_CHECKING:
+    from .rxnode import RWXNode
 
 
 class GraphVisualizer:
@@ -71,6 +73,11 @@ class GraphVisualizer:
     def _check_dependencies(self):
         if not ig or not mpl or not fill:
             raise RuntimeError("igraph, matplotlib, textwrap must be installed to visualize the graph.")
+        # Ensure a non-interactive backend for headless environments
+        try:
+            mpl.use('Agg')
+        except Exception:
+            pass
 
     def _build_rooted_subgraph(self):
         root = self.node.root
@@ -931,7 +938,7 @@ class GraphVisualizer:
             handles.append(patch)
         # Add enclosed marker legend if applicable
         if self.ctx.get('any_enclosed', False):
-            enclosed_handle = Line2D([0], [0], marker='o', linestyle='None', label=RWXNode.enclosed_name,
+            enclosed_handle = Line2D([0], [0], marker='o', linestyle='None', label=self.node.enclosed_name,
                                      markerfacecolor='none', markeredgecolor='black', markeredgewidth=2.5)
             handles.append(enclosed_handle)
         fw, fh = fig.get_size_inches()
