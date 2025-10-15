@@ -351,37 +351,30 @@ class UnlimitedJointGoal(Task):
 
 @dataclass
 class AvoidJointLimits(Task):
+    """
+    Calls AvoidSingleJointLimits for each joint in joint_list
+    """
+
     percentage: float = 15
-    joint_list: Optional[List[Union[PrefixedName, str]]] = None
+
+    connection_list: Optional[List[ActiveConnection1DOF]] = None
+    """list of joints for which AvoidSingleJointLimits will be called"""
+
     weight: float = WEIGHT_BELOW_CA
 
     def __post_init__(self):
-        """
-        Calls AvoidSingleJointLimits for each joint in joint_list
-        :param percentage:
-        :param joint_list: list of joints for which AvoidSingleJointLimits will be called
-        :param weight:
-        """
-        if self.joint_list is not None:
-            connection_list = [
-                god_map.world.get_connection_by_name(joint_name)
-                for joint_name in self.joint_list
-            ]
-        else:
-            connection_list = god_map.world.controlled_joints
-        for connection in connection_list:
-            if isinstance(connection, RevoluteConnection) or isinstance(
-                connection, PrismaticConnection
-            ):
+        if self.connection_list is None:
+            self.connection_list = god_map.world.controlled_connections
+        for connection in self.connection_list:
+            if isinstance(connection, (RevoluteConnection, PrismaticConnection)):
+                if not connection.dof.has_position_limits():
+                    continue
                 weight = self.weight
-                connection_symbol = connection.position
+                connection_symbol = connection.dof.symbols.position
                 percentage = self.percentage / 100.0
                 lower_limit = connection.dof.lower_limits.position
                 upper_limit = connection.dof.upper_limits.position
-                max_velocity = 100
-                max_velocity = cas.min(
-                    max_velocity, connection.dof.upper_limits.velocity
-                )
+                max_velocity = cas.min(100, connection.dof.upper_limits.velocity)
 
                 joint_range = upper_limit - lower_limit
                 center = (upper_limit + lower_limit) / 2.0
@@ -401,7 +394,7 @@ class AvoidJointLimits(Task):
 
                 self.add_inequality_constraint(
                     reference_velocity=max_velocity,
-                    name=connection.name,
+                    name=str(connection.name),
                     lower_error=lower_err,
                     upper_error=upper_err,
                     weight=weight,
