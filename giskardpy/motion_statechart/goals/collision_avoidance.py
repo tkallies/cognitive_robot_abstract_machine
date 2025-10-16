@@ -517,8 +517,10 @@ class CollisionAvoidance(Goal):
                     counter[body_a, body_b] = max(
                         [
                             counter[body_a, body_b],
-                            body_a_original.get_collision_config().buffer_zone_distance,
-                            body_b_original.get_collision_config().buffer_zone_distance,
+                            body_a_original.get_collision_config().buffer_zone_distance
+                            or 0,
+                            body_b_original.get_collision_config().buffer_zone_distance
+                            or 0,
                         ]
                     )
 
