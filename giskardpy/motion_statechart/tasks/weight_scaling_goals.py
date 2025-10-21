@@ -39,7 +39,7 @@ class BaseArmWeightScaling(Task):
             gains = defaultdict(dict)
             arm_v = None
             for name in self.arm_joints:
-                vs = god_map.world.get_connection_by_name(name).dofs
+                vs = god_map.world.get_connection_by_name(name).active_dofs
                 for v in vs:
                     v_gain = self.gain * (
                         scaling_exp / v.upper_limits.velocity
@@ -50,10 +50,8 @@ class BaseArmWeightScaling(Task):
                     gains[Derivatives.jerk][v] = v_gain
             base_v = None
             for name in self.base_joints:
-                vs = god_map.world.get_connection_by_name(name).dofs
+                vs = god_map.world.get_connection_by_name(name).active_dofs
                 for v in vs:
-                    if not v.upper_limits.velocity:
-                        continue  # Info: the second half of the dofs of the base link don't have upper limits defined. therefore they are skipped
                     v_gain = (
                         self.gain
                         / 100
