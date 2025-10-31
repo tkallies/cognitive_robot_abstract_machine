@@ -320,11 +320,6 @@ def test_reset():
     assert msg.is_end_motion()
 
 
-@pytest.mark.skip(reason="not yet implemented")
-def test_assign_node_to_observation_state():
-    assert False
-
-
 def test_nested_goals():
     msg = MotionStatechart(World())
 
