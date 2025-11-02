@@ -295,6 +295,7 @@ class PayloadMonitor(Monitor, ABC):
     Implement the _compute_observation method to compute and return the observation state.
     .. warning:: Don't touch anything else in this class.
     """
+
     observation_expression: cas.Expression = field(init=False)
 
     def __post_init__(self):
