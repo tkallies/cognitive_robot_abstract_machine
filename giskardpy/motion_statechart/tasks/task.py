@@ -28,8 +28,8 @@ class Task(MotionStatechartNode):
     Tasks are a set of constraints with the same predicates.
     """
 
-    _plot_style: str = field(default="filled, diagonals", kw_only=True)
-    _plot_shape: str = field(default="rectangle", kw_only=True)
+    _plot_style: str = field(default="filled, diagonals", init=False)
+    _plot_shape: str = field(default="rectangle", init=False)
 
     # quadratic_gains: List[QuadraticWeightGain] = field(default_factory=list, init=False)
     # linear_weight_gains: List[LinearWeightGain] = field(

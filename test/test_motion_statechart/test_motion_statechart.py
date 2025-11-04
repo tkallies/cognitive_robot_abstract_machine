@@ -290,14 +290,14 @@ def test_joint_goal():
     assert end.observation_state == msc.observation_state.TrinaryUnknown
     assert task1.life_cycle_state == LifeCycleValues.NOT_STARTED
     assert end.life_cycle_state == LifeCycleValues.NOT_STARTED
-
+    msc.draw()
     for i in range(100):
         msc.tick()
         if msc.is_end_motion():
             break
     else:
         raise Exception("Did not finish motion")
-
+    msc.draw()
     assert task1.observation_state == msc.observation_state.TrinaryTrue
     assert end.observation_state == msc.observation_state.TrinaryTrue
     assert task1.life_cycle_state == LifeCycleValues.RUNNING

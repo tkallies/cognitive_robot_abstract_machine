@@ -26,7 +26,7 @@ class JointPositionList(Task):
     weight: float = field(default=DefaultWeights.WEIGHT_BELOW_CA, kw_only=True)
     max_velocity: float = field(default=1.0, kw_only=True)
 
-    errors: List[cas.Expression] = field(init=False, default_factory=list)
+    _errors: List[cas.Expression] = field(init=False, default_factory=list)
     _constraints: Optional[ConstraintCollection] = field(
         init=False, default_factory=ConstraintCollection
     )
@@ -53,13 +53,13 @@ class JointPositionList(Task):
                 weight=self.weight,
                 task_expression=current,
             )
-            self.errors.append(cas.abs(error) < self.threshold)
+            self._errors.append(cas.abs(error) < self.threshold)
 
     def _create_constraints(self) -> ConstraintCollection:
         return self._constraints
 
     def _create_observation_expression(self) -> cas.Expression:
-        return cas.logic_all(cas.Expression(self.errors))
+        return cas.logic_all(cas.Expression(self._errors))
 
     def apply_limits_to_target(
         self, target: float, connection: ActiveConnection1DOF

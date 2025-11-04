@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import threading
 from abc import ABC
 from dataclasses import field, dataclass
@@ -96,8 +97,11 @@ class TrinaryCondition:
         """
         free_symbols = self.expression.free_symbols()
         if not free_symbols:
-            return str(cas.is_true_symbol(self.expression))
-        return cas.trinary_logic_to_str(self.expression)
+            str_representation = str(cas.is_true_symbol(self.expression))
+        else:
+            str_representation = cas.trinary_logic_to_str(self.expression)
+        str_representation = re.sub(r'"(.*)/observation"', r'"\1"', str_representation)
+        return str_representation
 
     def __repr__(self):
         return str(self)
@@ -162,8 +166,8 @@ class MotionStatechartNode(SubclassJSONSerializer):
     _reset_condition: TrinaryCondition = field(init=False)
 
     _plot: bool = field(default=True, kw_only=True)
-    _plot_style: str = field(default="filled, rounded", kw_only=True)
-    _plot_shape: str = field(default="rectangle", kw_only=True)
+    _plot_style: str = field(default="filled, rounded", init=False)
+    _plot_shape: str = field(default="rectangle", init=False)
     _plot_extra_boarder_styles: List[str] = field(default_factory=list, kw_only=True)
 
     def __post_init__(self):
@@ -339,8 +343,8 @@ GenericMotionStatechartNode = TypeVar(
 @dataclass(eq=False, repr=False)
 class Goal(MotionStatechartNode):
     nodes: List[MotionStatechartNode] = field(default_factory=list)
-    _plot_style: str = field(default="filled", kw_only=True)
-    _plot_shape: str = field(default="none", kw_only=True)
+    _plot_style: str = field(default="filled", init=False)
+    _plot_shape: str = field(default="none", init=False)
 
     @property
     def motion_statechart(self) -> MotionStatechart:
@@ -476,8 +480,8 @@ class ThreadPayloadMonitor(MotionStatechartNode, ABC):
 
 @dataclass(eq=False, repr=False)
 class EndMotion(MotionStatechartNode):
-    _plot_style: str = field(default="filled, rounded", kw_only=True)
-    _plot_shape: str = field(default="rectangle", kw_only=True)
+    _plot_style: str = field(default="filled, rounded", init=False)
+    _plot_shape: str = field(default="rectangle", init=False)
     _plot_boarder_styles: List[str] = field(
         default_factory=lambda: ["rounded"], kw_only=True
     )
@@ -495,8 +499,8 @@ class CancelMotion(MotionStatechartNode):
     _plot_extra_boarder_styles: List[str] = field(
         default_factory=lambda: ["dashed, rounded"], kw_only=True
     )
-    _plot_style: str = field(default="filled, rounded", kw_only=True)
-    _plot_shape: str = field(default="rectangle", kw_only=True)
+    _plot_style: str = field(default="filled, rounded", init=False)
+    _plot_shape: str = field(default="rectangle", init=False)
 
     def _create_observation_expression(self) -> cas.Expression:
         return cas.TrinaryTrue

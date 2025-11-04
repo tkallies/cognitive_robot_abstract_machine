@@ -133,7 +133,7 @@ class MotionStatechartGraphviz:
             ratio="compress",
         )
 
-    def format_motion_graph_node(
+    def _format_motion_graph_node(
         self,
         node: MotionStatechartNode,
     ) -> str:
@@ -198,16 +198,16 @@ class MotionStatechartGraphviz:
             )
         return label
 
-    def escape_name(self, name: str) -> str:
+    def _escape_name(self, name: str) -> str:
         return f'"{name}"'
 
-    def get_cluster_of_node(
+    def _get_cluster_of_node(
         self, node_name: str, graph: Union[pydot.Graph, pydot.Cluster]
     ) -> Optional[pydot.Cluster]:
         node_cluster = None
         for cluster in graph.get_subgraphs():
             if (
-                len(cluster.get_node(self.escape_name(node_name))) == 1
+                len(cluster.get_node(self._escape_name(node_name))) == 1
                 or len(cluster.get_node(node_name)) == 1
             ):
                 node_cluster = cluster
@@ -241,7 +241,7 @@ class MotionStatechartGraphviz:
         return pydot_node
 
     def _create_pydot_node(self, node: MotionStatechartNode) -> pydot.Node:
-        label = self.format_motion_graph_node(node=node)
+        label = self._format_motion_graph_node(node=node)
         pydot_node = pydot.Node(
             str(node.name),
             label=label,
@@ -261,11 +261,11 @@ class MotionStatechartGraphviz:
         top_level_nodes = [
             node for node in self.motion_statechart.nodes if not node.parent_node
         ]
-        self.add_nodes(self.graph, top_level_nodes)
-        self.add_edges()
+        self._add_nodes(self.graph, top_level_nodes)
+        self._add_edges()
         return self.graph
 
-    def add_nodes(
+    def _add_nodes(
         self,
         parent_cluster: Union[pydot.Graph, pydot.Cluster],
         nodes: List[MotionStatechartNode],
@@ -277,7 +277,7 @@ class MotionStatechartGraphviz:
                     graph=goal_cluster,
                     node=node,
                 )
-                self.add_nodes(goal_cluster, node.nodes)
+                self._add_nodes(goal_cluster, node.nodes)
 
             self._add_node(
                 parent_cluster,
@@ -302,7 +302,7 @@ class MotionStatechartGraphviz:
         self._cluster_map[node] = goal_cluster
         return goal_cluster
 
-    def add_edges(self):
+    def _add_edges(self):
         transition: TrinaryCondition
         for edge_index, (
             parent_node_index,
@@ -316,13 +316,13 @@ class MotionStatechartGraphviz:
             if not self._are_nodes_in_same_cluster(parent_node, child_node):
                 continue
             if transition.kind == TransitionKind.START:
-                self.add_start_condition_edge(parent_node, child_node)
+                self._add_start_condition_edge(parent_node, child_node)
             if transition.kind == TransitionKind.PAUSE:
-                self.add_pause_condition_edge(parent_node, child_node)
+                self._add_pause_condition_edge(parent_node, child_node)
             if transition.kind == TransitionKind.END:
-                self.add_end_condition_edge(parent_node, child_node)
+                self._add_end_condition_edge(parent_node, child_node)
             if transition.kind == TransitionKind.RESET:
-                self.add_reset_condition_edge(parent_node, child_node)
+                self._add_reset_condition_edge(parent_node, child_node)
 
     def _are_nodes_in_same_cluster(
         self, parent_node: MotionStatechartNode, child_node: MotionStatechartNode
@@ -335,7 +335,7 @@ class MotionStatechartGraphviz:
             return False
         return parent_node.parent_node.name == child_node.parent_node.name
 
-    def add_start_condition_edge(
+    def _add_start_condition_edge(
         self,
         parent_node: MotionStatechartNode,
         child_node: MotionStatechartNode,
@@ -345,8 +345,8 @@ class MotionStatechartGraphviz:
         source_node = parent_node
         source_node_name = str(destination_node.name)
         destination_node_name = str(source_node.name)
-        node_cluster = self.get_cluster_of_node(destination_node_name, graph)
-        sub_node_cluster = self.get_cluster_of_node(source_node_name, graph)
+        node_cluster = self._get_cluster_of_node(destination_node_name, graph)
+        sub_node_cluster = self._get_cluster_of_node(source_node_name, graph)
         kwargs = {}
         if node_cluster is not None:
             kwargs["lhead"] = node_cluster.get_name()
@@ -366,7 +366,7 @@ class MotionStatechartGraphviz:
             )
         )
 
-    def add_pause_condition_edge(
+    def _add_pause_condition_edge(
         self,
         parent_node: MotionStatechartNode,
         child_node: MotionStatechartNode,
@@ -376,8 +376,8 @@ class MotionStatechartGraphviz:
         source_node = parent_node
         source_node_name = str(destination_node.name)
         destination_node_name = str(source_node.name)
-        node_cluster = self.get_cluster_of_node(destination_node_name, graph)
-        sub_node_cluster = self.get_cluster_of_node(source_node_name, graph)
+        node_cluster = self._get_cluster_of_node(destination_node_name, graph)
+        sub_node_cluster = self._get_cluster_of_node(source_node_name, graph)
         kwargs = {}
         if node_cluster is not None:
             kwargs["lhead"] = node_cluster.get_name()
@@ -398,7 +398,7 @@ class MotionStatechartGraphviz:
             )
         )
 
-    def add_end_condition_edge(
+    def _add_end_condition_edge(
         self,
         parent_node: MotionStatechartNode,
         child_node: MotionStatechartNode,
@@ -408,8 +408,8 @@ class MotionStatechartGraphviz:
         source_node = parent_node
         source_node_name = str(destination_node.name)
         destination_node_name = str(source_node.name)
-        node_cluster = self.get_cluster_of_node(destination_node_name, graph)
-        sub_node_cluster = self.get_cluster_of_node(source_node_name, graph)
+        node_cluster = self._get_cluster_of_node(destination_node_name, graph)
+        sub_node_cluster = self._get_cluster_of_node(source_node_name, graph)
         kwargs = {}
         if node_cluster is not None:
             kwargs["lhead"] = node_cluster.get_name()
@@ -432,7 +432,7 @@ class MotionStatechartGraphviz:
             )
         )
 
-    def add_reset_condition_edge(
+    def _add_reset_condition_edge(
         self,
         parent_node: MotionStatechartNode,
         child_node: MotionStatechartNode,
@@ -442,8 +442,8 @@ class MotionStatechartGraphviz:
         source_node = parent_node
         source_node_name = str(destination_node.name)
         destination_node_name = str(source_node.name)
-        node_cluster = self.get_cluster_of_node(destination_node_name, graph)
-        sub_node_cluster = self.get_cluster_of_node(source_node_name, graph)
+        node_cluster = self._get_cluster_of_node(destination_node_name, graph)
+        sub_node_cluster = self._get_cluster_of_node(source_node_name, graph)
         kwargs = {}
         if node_cluster is not None:
             kwargs["lhead"] = node_cluster.get_name()
