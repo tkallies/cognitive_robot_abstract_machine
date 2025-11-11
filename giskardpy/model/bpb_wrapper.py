@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass, field
 from typing import List, Tuple, Optional
 
-import betterpybullet as pb
+import giskardpy_bullet_bindings as pb
 import trimesh
 from line_profiler.explicit_profiler import profile
 from pkg_resources import resource_filename
@@ -25,9 +25,6 @@ from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
 
 CollisionObject = pb.CollisionObject
-
-if not hasattr(pb, "__version__") or pb.__version__ != "1.0.0":
-    raise ImportError("Betterpybullet is outdated.")
 
 
 def create_collision(pb_collision: pb.Collision, world: World) -> GiskardCollision:

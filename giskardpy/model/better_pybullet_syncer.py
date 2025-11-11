@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Dict, Tuple, DefaultDict, List, Set, Optional, Iterable
 
-import betterpybullet as bpb
+import giskardpy_bullet_bindings as bpb
 from line_profiler import profile
 
 from giskardpy.god_map import god_map

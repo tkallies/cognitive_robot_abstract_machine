@@ -1,4 +1,4 @@
-import betterpybullet as bpb
+import giskardpy_bullet_bindings as bpb
 import numpy as np
 
 

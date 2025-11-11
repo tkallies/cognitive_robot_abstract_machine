@@ -42,37 +42,6 @@ pip3 install -r requirements.txt
 pip3 install -e .                           
 ```
 
-#### (Optional) Install alternative QP solvers
-Giskard supports alternative QP solvers, but they are all slower than qpSWIFT, which is the default.
-
-- `gurobi`: Commercial solver. Useful for debugging during development.
-  - ```sudo pip3 install gurobipy```
-  - You can apply for a free academic license or buy one here: https://www.gurobi.com/academia/academic-program-and-licenses/
-  - If you have vpn access to or are in the local network of the IAI of the University of Bremen, follow these instructions: https://ai.uni-bremen.de/wiki/intern/adm/gurobi
-
-[//]: # (- `Clarabel.rs`: `sudo pip3 install clarabel` &#40;https://github.com/oxfordcontrol/Clarabel.rs&#41;)
-
-
-### (Optional) Build Custom Bullet Bindings
-Giskard uses Adrian Röfer's bullet bindings instead of the official ones, as they are much faster for our use case.
-Install them like this:
-```
-workon giskardpy
-mkdir -p ~/libs && cd ~/libs                # choose a place where you want to build pybullet
-git clone -b jazzy https://github.com/SemRoCo/bullet3.git
-cd bullet3                                  # be sure to be in the bullet3 folder
-./build_better_pybullet.sh                  # this script will also clone and build pybind11 into libs
-source ~/.bashrc                            # the script adds a python path modification to your bashrc
-```
-To test your installation do:
-```
-workon giskardpy
-python3 -c "import betterpybullet"
-```
-If it doesn't work, make sure that your ```$PYTHONPATH``` includes something like 
-```/path/to/your/bullet3/build_cmake/better_python:/path/to/your/bullet3/examples/pybullet```. 
-
-
 ### Tutorials
 https://github.com/SemRoCo/giskardpy/wiki
 

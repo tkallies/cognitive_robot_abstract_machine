@@ -55,7 +55,7 @@ class ExternalCA(Goal):
         sample_period = god_map.qp_controller.config.mpc_dt
         number_of_external_collisions = self.get_number_of_external_collisions()
 
-        map_T_a = self.world.compose_forward_kinematics_expression(
+        map_T_a = self.world._forward_kinematic_manager.compose_expression(
             self.root, self.main_body
         )
 
@@ -217,7 +217,7 @@ class SelfCA(Goal):
         number_of_self_collisions = self.get_number_of_self_collisions()
         sample_period = god_map.qp_controller.config.mpc_dt
 
-        b_T_a = god_map.world.compose_forward_kinematics_expression(
+        b_T_a = god_map.world._forward_kinematic_manager.compose_expression(
             self.body_b, self.body_a
         )
         pb_T_b = self.get_b_T_pb().inverse()
@@ -368,7 +368,7 @@ class CollisionAvoidanceHint(Goal):
         link_b_hash = self.get_link_b_hash()
         actual_distance_capped = cas.max(actual_distance, 0)
 
-        root_T_a = god_map.world.compose_forward_kinematics_expression(
+        root_T_a = god_map.world._forward_kinematic_manager.compose_expression(
             self.root_link, self.link_name
         )
 
@@ -502,15 +502,20 @@ class CollisionAvoidance(Goal):
             for body_a_original in robot.bodies_with_enabled_collision:
                 for body_b_original in robot.bodies_with_enabled_collision:
                     if (
-                        body_a_original,
-                        body_b_original,
-                    ) in god_map.world.disabled_collision_pairs or (
-                        body_b_original,
-                        body_a_original,
-                    ) in god_map.world.disabled_collision_pairs:
+                        (
+                            body_a_original,
+                            body_b_original,
+                        )
+                        in god_map.world._collision_pair_manager.disabled_collision_pairs
+                        or (
+                            body_b_original,
+                            body_a_original,
+                        )
+                        in god_map.world._collision_pair_manager.disabled_collision_pairs
+                    ):
                         continue
                     body_a, body_b = (
-                        god_map.world.compute_chain_reduced_to_controlled_joints(
+                        god_map.world.compute_chain_reduced_to_controlled_connections(
                             body_a_original, body_b_original
                         )
                     )
