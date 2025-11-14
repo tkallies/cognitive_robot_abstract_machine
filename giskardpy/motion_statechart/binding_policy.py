@@ -10,6 +10,7 @@ from giskardpy.motion_statechart.auxilary_variable_manager import (
     AuxiliaryVariableManager,
 )
 from giskardpy.motion_statechart.context import BuildContext
+from giskardpy.utils.utils import JsonSerializableEnum
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import (
@@ -17,7 +18,7 @@ from semantic_digital_twin.world_description.world_entity import (
 )
 
 
-class GoalBindingPolicy(SubclassJSONSerializer, Enum):
+class GoalBindingPolicy(JsonSerializableEnum):
     """
     This policy should be used together with ForwardKinematicsBinding.
     """
@@ -26,13 +27,6 @@ class GoalBindingPolicy(SubclassJSONSerializer, Enum):
     """Forward kinematics is only computed once at build time."""
     Bind_on_start = 2
     """Forward kinematics is computed during on_start of the MotionStatechartNode."""
-
-    @classmethod
-    def _from_json(cls, data: Dict[str, Any], **kwargs) -> Self:
-        return cls(data["value"])
-
-    def to_json(self) -> Dict[str, Any]:
-        return {**super().to_json(), "value": self.value}
 
 
 @dataclass

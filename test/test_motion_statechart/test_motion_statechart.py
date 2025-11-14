@@ -24,6 +24,7 @@ from giskardpy.motion_statechart.graph_node import (
     CancelMotion,
 )
 from giskardpy.motion_statechart.graph_node import ThreadPayloadMonitor
+from giskardpy.motion_statechart.monitors.monitors import LocalMinimumReached
 from giskardpy.motion_statechart.monitors.overwrite_state_monitors import (
     SetSeedConfiguration,
     SetOdometry,
@@ -1238,9 +1239,12 @@ def test_collision_avoidance(box_bot_world):
     )
     msc.add_node(collision_avoidance)
 
+    local_min = LocalMinimumReached(name=PrefixedName("local_min"))
+    msc.add_node(local_min)
+
     end = EndMotion(name=PrefixedName("end"))
     msc.add_node(end)
-    end.start_condition = cart_goal.observation_variable
+    end.start_condition = local_min.observation_variable
 
     json_data = msc.to_json()
     json_str = json.dumps(json_data)
@@ -1259,9 +1263,8 @@ def test_collision_avoidance(box_bot_world):
     kin_sim.compile()
 
     msc_copy.draw("muh.pdf")
-    with pytest.raises(TimeoutError):
-        kin_sim.tick_until_end(500)
-        kin_sim.collision_scene.check_collisions()
+    kin_sim.tick_until_end(500)
+    kin_sim.collision_scene.check_collisions()
     contact_distance = (
         kin_sim.collision_scene.closest_points.external_collisions[tip]
         .data[0]

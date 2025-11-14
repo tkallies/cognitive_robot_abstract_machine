@@ -7,6 +7,7 @@ from typing_extensions import Self
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.abstract_robot import AbstractRobot
+from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.spatial_types import Vector3, TransformationMatrix
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
@@ -41,6 +42,7 @@ def pr2_world():
             parent=localization_body, child=pr2_root, world=world_with_pr2
         )
         world_with_pr2.add_connection(c_root_bf)
+        PR2.from_world(world_with_pr2)
 
     return world_with_pr2
 

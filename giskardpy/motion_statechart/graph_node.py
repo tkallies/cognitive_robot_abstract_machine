@@ -486,6 +486,15 @@ class MotionStatechartNode(SubclassJSONSerializer):
                 continue
             if isinstance(field_data, dict) and "type" in field_data:
                 field_data = SubclassJSONSerializer.from_json(field_data, **kwargs)
+            if isinstance(field_data, list):
+                field_data = [
+                    SubclassJSONSerializer.from_json(element_data, **kwargs)
+                    for element_data in field_data
+                ]
+            if isinstance(field_data, dict):
+                raise NotImplementedError(
+                    "dict parameters of MotionStatechartNode are not supported yet. Use a list instead."
+                )
             node_kwargs[field_name] = field_data
         return cls(**node_kwargs)
 

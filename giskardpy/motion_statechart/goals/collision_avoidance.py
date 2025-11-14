@@ -7,7 +7,7 @@ from line_profiler import profile
 import semantic_digital_twin.spatial_types.spatial_types as cas
 from giskardpy.data_types.exceptions import GiskardException
 from giskardpy.middleware import get_middleware
-from giskardpy.model.collision_matrix_manager import CollisionViewRequest
+from giskardpy.model.collision_matrix_manager import CollisionRequest
 from giskardpy.motion_statechart.context import BuildContext
 from giskardpy.motion_statechart.data_types import DefaultWeights
 from giskardpy.motion_statechart.graph_node import (
@@ -37,18 +37,72 @@ class CollisionAvoidanceTask(Task):
     Can result in insolvable QPs if multiple of these constraints are violated.
     """
 
-    root_link: KinematicStructureEntity
-    tip_link: KinematicStructureEntity
+    connection: ActiveConnection = field(kw_only=True)
+    max_velocity: float = field(default=0.2, kw_only=True)
+    idx: int = field(default=0, kw_only=True)
+    max_avoided_bodies: int = field(default=1, kw_only=True)
 
-    root_V_contact_normal: cas.Vector3
-    tip_P_contact: cas.Point3
-    distance_expression: cas.Expression
+    @property
+    def tip(self) -> KinematicStructureEntity:
+        return self.connection.child
 
-    buffer_zone_distance: cas.Expression
-    violated_distance: cas.Expression
+    def create_weight(self, context: BuildContext) -> cas.Expression:
+        """
+        Creates a weight for this task which is scaled by the number of external collisions.
+        :return:
+        """
+        number_of_external_collisions = (
+            context.collision_scene.external_number_of_collisions_symbol(self.tip)
+        )
+        weight = cas.Expression(
+            data=DefaultWeights.WEIGHT_COLLISION_AVOIDANCE
+        ).safe_division(cas.min(number_of_external_collisions, self.max_avoided_bodies))
+        return weight
 
-    max_velocity: cas.Expression
-    weight: cas.Expression
+    def create_buffer_zone_expression(
+        self, context: BuildContext
+    ) -> Tuple[cas.Expression, cas.Expression]:
+        """
+        Creates an expression that is equal to the buffer zone distance of the body that is currently
+        closest to the main body.
+        """
+        direct_children = context.world.get_direct_child_bodies_with_collision(
+            self.connection
+        )
+        context.collision_scene.monitor_link_for_external(self.tip, self.idx)
+
+        buffer_zone_distance = max(
+            b.get_collision_config().buffer_zone_distance
+            for b in direct_children
+            if b.get_collision_config().buffer_zone_distance is not None
+        )
+        violated_distance = max(
+            b.get_collision_config().violated_distance for b in direct_children
+        )
+
+        actual_link_b_hash = context.collision_scene.external_link_b_hash_symbol(
+            self.tip, self.idx
+        )
+        b_result_cases = []
+        for body in context.world.bodies_with_enabled_collision:
+            if body.get_collision_config().buffer_zone_distance is None:
+                continue
+            if body.get_collision_config().disabled:
+                continue
+            if body.get_collision_config().buffer_zone_distance > buffer_zone_distance:
+                b_result_cases.append(
+                    (body.__hash__(), body.get_collision_config().buffer_zone_distance)
+                )
+        if len(b_result_cases) > 0:
+            buffer_zone_expr = cas.if_eq_cases(
+                a=actual_link_b_hash,
+                b_result_cases=b_result_cases,
+                else_result=cas.Expression(buffer_zone_distance),
+            )
+        else:
+            buffer_zone_expr = buffer_zone_distance
+
+        return buffer_zone_expr, cas.Expression(violated_distance)
 
     def compute_control_horizon(
         self, qp_controller_config: QPControllerConfig
@@ -63,6 +117,8 @@ class CollisionAvoidanceTask(Task):
         context: BuildContext,
         lower_limit: cas.Expression,
         buffer_zone_expr: cas.Expression,
+        violated_distance: cas.Expression,
+        distance_expression: cas.Expression,
     ) -> cas.Expression:
         qp_limits_for_lba = (
             self.max_velocity
@@ -70,23 +126,23 @@ class CollisionAvoidanceTask(Task):
             * self.compute_control_horizon(context.qp_controller_config)
         )
 
-        hard_threshold = cas.min(self.violated_distance, buffer_zone_expr / 2)
+        hard_threshold = cas.min(violated_distance, buffer_zone_expr / 2)
 
         lower_limit_limited = cas.limit(
             lower_limit, -qp_limits_for_lba, qp_limits_for_lba
         )
 
         upper_slack = cas.if_greater(
-            self.distance_expression,
+            distance_expression,
             hard_threshold,
-            lower_limit_limited + cas.max(0, self.distance_expression - hard_threshold),
+            lower_limit_limited + cas.max(0, distance_expression - hard_threshold),
             lower_limit_limited - 1e-4,
         )
         # undo factor in A
         upper_slack /= context.qp_controller_config.mpc_dt
 
         upper_slack = cas.if_greater(
-            self.distance_expression,
+            distance_expression,
             50,  # assuming that distance of unchecked closest points is 100
             cas.Expression(1e4),
             cas.max(0, upper_slack),
@@ -96,27 +152,45 @@ class CollisionAvoidanceTask(Task):
     def build(self, context: BuildContext) -> NodeArtifacts:
         artifacts = NodeArtifacts()
 
-        map_T_a = context.world.compose_forward_kinematics_expression(
-            self.root_link, self.tip_link
+        root_V_contact_normal = context.collision_scene.external_map_V_n_symbol(
+            self.tip, self.idx
+        )
+        tip_P_contact = context.collision_scene.external_new_a_P_pa_symbol(
+            self.tip, self.idx
+        )
+        distance_expression = context.collision_scene.external_contact_distance_symbol(
+            self.tip, self.idx
         )
 
-        map_V_pa = cas.Vector3.from_iterable(map_T_a @ self.tip_P_contact)
+        buffer_zone_expr, violated_distance = self.create_buffer_zone_expression(
+            context
+        )
+
+        map_T_a = context.world.compose_forward_kinematics_expression(
+            context.world.root, self.tip
+        )
+
+        map_V_pa = cas.Vector3.from_iterable(map_T_a @ tip_P_contact)
 
         # the position distance is not accurate, but the derivative is still correct
-        dist = self.root_V_contact_normal @ map_V_pa
+        dist = root_V_contact_normal @ map_V_pa
 
-        lower_limit = self.buffer_zone_distance - self.distance_expression
+        lower_limit = buffer_zone_expr - distance_expression
 
         artifacts.constraints.add_inequality_constraint(
             name=PrefixedName("collision avoidance", str(self.name)),
             reference_velocity=self.max_velocity,
             lower_error=lower_limit,
             upper_error=float("inf"),
-            weight=self.weight,
+            weight=self.create_weight(context),
             task_expression=dist,
             lower_slack_limit=-float("inf"),
             upper_slack_limit=self.create_upper_slack(
-                context, lower_limit, self.buffer_zone_distance
+                context=context,
+                lower_limit=lower_limit,
+                buffer_zone_expr=buffer_zone_expr,
+                violated_distance=violated_distance,
+                distance_expression=cas.Expression(distance_expression),
             ),
         )
 
@@ -161,91 +235,14 @@ class ExternalCollisionAvoidance(Goal):
         )
         self.add_node(distance_monitor)
 
-        buffer_zone_expr, violated_distance = self.create_buffer_zone_expression(
-            context
-        )
-
         task = CollisionAvoidanceTask(
             name=PrefixedName("collision avoidance", str(self.name)),
-            root_link=context.world.root,
-            tip_link=self._main_body,
-            root_V_contact_normal=context.collision_scene.external_map_V_n_symbol(
-                self._main_body, self.idx
-            ),
-            tip_P_contact=context.collision_scene.external_new_a_P_pa_symbol(
-                self._main_body, self.idx
-            ),
-            distance_expression=context.collision_scene.external_contact_distance_symbol(
-                self._main_body, self.idx
-            ),
-            buffer_zone_distance=buffer_zone_expr,
-            violated_distance=violated_distance,
-            weight=self.create_weight(context),
+            connection=self.connection,
             max_velocity=self.max_velocity,
         )
         self.add_node(task)
 
         task.pause_condition = distance_monitor.observation_variable
-
-    def create_buffer_zone_expression(
-        self, context: BuildContext
-    ) -> Tuple[cas.Expression, cas.Expression]:
-        """
-        Creates an expression that is equal to the buffer zone distance of the body that is currently
-        closest to the main body.
-        """
-        direct_children = context.world.get_direct_child_bodies_with_collision(
-            self.connection
-        )
-        context.collision_scene.monitor_link_for_external(self._main_body, self.idx)
-
-        buffer_zone_distance = max(
-            b.get_collision_config().buffer_zone_distance
-            for b in direct_children
-            if b.get_collision_config().buffer_zone_distance is not None
-        )
-        violated_distance = max(
-            b.get_collision_config().violated_distance for b in direct_children
-        )
-
-        actual_link_b_hash = context.collision_scene.external_link_b_hash_symbol(
-            self._main_body, self.idx
-        )
-        b_result_cases = []
-        for body in context.world.bodies_with_enabled_collision:
-            if body.get_collision_config().buffer_zone_distance is None:
-                continue
-            if body.get_collision_config().disabled:
-                continue
-            if body.get_collision_config().buffer_zone_distance > buffer_zone_distance:
-                b_result_cases.append(
-                    (body.__hash__(), body.get_collision_config().buffer_zone_distance)
-                )
-        if len(b_result_cases) > 0:
-            buffer_zone_expr = cas.if_eq_cases(
-                a=actual_link_b_hash,
-                b_result_cases=b_result_cases,
-                else_result=cas.Expression(buffer_zone_distance),
-            )
-        else:
-            buffer_zone_expr = buffer_zone_distance
-
-        return buffer_zone_expr, cas.Expression(violated_distance)
-
-    def create_weight(self, context: BuildContext) -> cas.Expression:
-        """
-        Creates a weight for this task which is scaled by the number of external collisions.
-        :return:
-        """
-        number_of_external_collisions = (
-            context.collision_scene.external_number_of_collisions_symbol(
-                self._main_body
-            )
-        )
-        weight = cas.Expression(
-            data=DefaultWeights.WEIGHT_COLLISION_AVOIDANCE
-        ).safe_division(cas.min(number_of_external_collisions, self.max_avoided_bodies))
-        return weight
 
 
 @dataclass
@@ -411,7 +408,7 @@ class SelfCA(Goal):
 
 @dataclass(eq=False, repr=False)
 class CollisionAvoidance(Goal):
-    collision_entries: List[CollisionViewRequest] = field(default_factory=list)
+    collision_entries: List[CollisionRequest] = field(default_factory=list)
 
     def expand(self, context: BuildContext) -> None:
         context.collision_scene.matrix_manager.parse_collision_requests(

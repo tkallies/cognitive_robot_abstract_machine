@@ -46,16 +46,9 @@ class CartesianPosition(Task):
     def build(self, context: BuildContext) -> NodeArtifacts:
         artifacts = NodeArtifacts()
 
-        # if self.absolute:
         root_P_goal = context.world.transform(
             target_frame=self.root_link, spatial_object=self.goal_point
         )
-        # else:
-        #     root_T_x = god_map.world.compose_forward_kinematics_expression(
-        #         self.root_link, self.goal_point.reference_frame
-        #     )
-        #     root_P_goal = root_T_x.dot(self.goal_point)
-        #     root_P_goal = self.update_expression_on_starting(root_P_goal)
 
         r_P_c = context.world.compose_forward_kinematics_expression(
             self.root_link, self.tip_link

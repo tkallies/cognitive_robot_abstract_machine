@@ -15,11 +15,13 @@ from giskardpy.model.collision_world_syncer import (
 from giskardpy.model.collisions import NullCollisionDetector
 from giskardpy.motion_statechart.auxilary_variable_manager import (
     AuxiliaryVariableManager,
+    AuxiliaryVariable,
 )
 from giskardpy.motion_statechart.context import BuildContext
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from giskardpy.qp.qp_controller import QPController
 from giskardpy.qp.qp_controller_config import QPControllerConfig
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.abstract_robot import (
     AbstractRobot,
 )
@@ -42,6 +44,9 @@ class Executor:
     )
     qp_controller: Optional[QPController] = field(default=None, init=False)
 
+    _control_cycles: int = field(init=False)
+    _control_cycles_variable: AuxiliaryVariable = field(init=False)
+
     def __post_init__(self, collision_checker: CollisionCheckerLib):
         if collision_checker == CollisionCheckerLib.bpb:
             collision_detector = BulletCollisionDetector(_world=self.world)
@@ -54,7 +59,16 @@ class Executor:
             collision_detector=collision_detector,
         )
 
+    def _create_control_cycles_variable(self):
+        self._control_cycles_variable = (
+            self.auxiliary_variable_manager.create_float_variable(
+                PrefixedName("control_cycles"), lambda: self._control_cycles
+            )
+        )
+
     def compile(self):
+        self._control_cycles = -1
+        self._create_control_cycles_variable()
         self.motion_statechart.compile(self.build_context)
         self._compile_qp_controller(self.controller_config)
 
@@ -65,9 +79,11 @@ class Executor:
             auxiliary_variable_manager=self.auxiliary_variable_manager,
             collision_scene=self.collision_scene,
             qp_controller_config=self.controller_config,
+            control_cycle_variable=self._control_cycles_variable,
         )
 
     def tick(self):
+        self._control_cycles += 1
         self.collision_scene.sync()
         self.collision_scene.check_collisions()
         self.motion_statechart.tick(self.build_context)

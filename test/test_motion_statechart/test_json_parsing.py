@@ -4,6 +4,10 @@ import pytest
 
 from conftest import mini_world
 from giskardpy.executor import Executor
+from giskardpy.model.collision_matrix_manager import (
+    CollisionRequest,
+    CollisionAvoidanceTypes,
+)
 from giskardpy.motion_statechart.data_types import (
     LifeCycleValues,
     ObservationStateValues,
@@ -22,6 +26,7 @@ from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     KinematicStructureEntityKwargsTracker,
 )
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.robots.abstract_robot import AbstractRobot
 from semantic_digital_twin.spatial_types import Vector3, TransformationMatrix
 from semantic_digital_twin.spatial_types.derivatives import DerivativeMap
 from semantic_digital_twin.spatial_types.spatial_types import (
@@ -44,6 +49,26 @@ def test_TrueMonitor():
     new_json_data = json.loads(json_str)
     node_copy = TrueMonitor.from_json(new_json_data)
     assert node_copy.name == node.name
+
+
+def test_CollisionRequest(pr2_world: World):
+    robot = pr2_world.get_semantic_annotations_by_type(AbstractRobot)[0]
+    collision_request = CollisionRequest(
+        type_=CollisionAvoidanceTypes.AVOID_COLLISION,
+        distance=0.2,
+        body_group1=robot.bodies,
+        body_group2=robot.bodies,
+    )
+    json_data = collision_request.to_json()
+    json_str = json.dumps(json_data)
+    new_json_data = json.loads(json_str)
+    tracker = KinematicStructureEntityKwargsTracker.from_world(pr2_world)
+    kwargs = tracker.create_kwargs()
+    collision_request_copy = CollisionRequest.from_json(new_json_data, **kwargs)
+    assert collision_request_copy.type_ == collision_request.type_
+    assert collision_request_copy.distance == collision_request.distance
+    assert collision_request_copy.body_group1 == collision_request.body_group1
+    assert collision_request_copy.body_group2 == collision_request.body_group2
 
 
 def test_trinary_transition():

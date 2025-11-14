@@ -6,9 +6,11 @@ from dataclasses import field
 
 import semantic_digital_twin.spatial_types.spatial_types as cas
 from giskardpy.god_map import god_map
+from giskardpy.motion_statechart.context import BuildContext
 from giskardpy.motion_statechart.data_types import ObservationStateValues
 from giskardpy.motion_statechart.graph_node import (
     MotionStatechartNode,
+    NodeArtifacts,
 )
 from giskardpy.utils.decorators import dataclass
 
@@ -38,10 +40,12 @@ class LocalMinimumReached(MotionStatechartNode):
     joint_convergence_threshold: float = 0.01
     windows_size: int = 1
 
-    def __post_init__(self):
+    def build(self, context: BuildContext) -> NodeArtifacts:
+        artifacts = NodeArtifacts()
+
         ref = []
         symbols = []
-        for dof in god_map.world.active_degrees_of_freedom:
+        for dof in context.world.active_degrees_of_freedom:
             velocity_limit = dof.upper_limits.velocity
             velocity_limit *= self.joint_convergence_threshold
             velocity_limit = min(
@@ -52,10 +56,15 @@ class LocalMinimumReached(MotionStatechartNode):
         ref = cas.Expression(ref)
         vel_symbols = cas.Expression(symbols)
 
-        traj_longer_than_1_sec = god_map.time_symbol > 1
-        self.observation_expression = cas.logic_and(
+        dt = (
+            context.qp_controller_config.control_dt
+            or context.qp_controller_config.mpc_dt
+        )
+        traj_longer_than_1_sec = context.control_cycle_variable * dt > 1
+        artifacts.observation = cas.trinary_logic_and(
             traj_longer_than_1_sec, cas.logic_all(cas.abs(vel_symbols) < ref)
         )
+        return artifacts
 
 
 @dataclass
