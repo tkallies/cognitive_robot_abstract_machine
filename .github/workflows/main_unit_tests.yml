@@ -70,7 +70,7 @@ jobs:
         with:
           path: 'giskardpy'
       - name: move pr2.urdf to temp folder from root folder
-        run: mv /root/pr2.urdf /__w/giskardpy/giskardpy/giskardpy/test/urdfs/pr2.urdf
+        run: mv /root/pr2.urdf /__w/giskardpy/giskardpy/giskardpy/resources/urdf/pr2.urdf
       - name: test
         run: |
           cd giskardpy/test
