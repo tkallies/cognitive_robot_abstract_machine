@@ -138,11 +138,6 @@ def test_all_conditions_with_nodes():
 
 
 @pytest.mark.skip(reason="not implemented yet")
-def test_arrange_in_sequence():
-    pass
-
-
-@pytest.mark.skip(reason="not implemented yet")
 def test_transition_hooks():
     pass
 

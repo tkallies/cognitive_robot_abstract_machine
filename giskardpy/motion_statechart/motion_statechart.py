@@ -367,16 +367,8 @@ class MotionStatechart(SubclassJSONSerializer):
         This is useful if only the structure of the motion statechart is needed, for example, for visualization.
         """
         motion_statechart_copy = MotionStatechart()
-        self._create_structure_copy(self.top_level_nodes, motion_statechart_copy)
-        return motion_statechart_copy
-
-    def _create_structure_copy(
-        self, nodes: List[MotionStatechartNode], destination: MotionStatechart | Goal
-    ):
-        """
-        Creates a structure copy of a node and adds it to the destination.
-        """
-        for node in nodes:
+        # copy nodes in order to make sure index is correct
+        for node in self.nodes:
             match node:
                 case Goal():
                     node_copy = Goal(name=node.name)
@@ -384,14 +376,24 @@ class MotionStatechart(SubclassJSONSerializer):
                     node_copy = Task(name=node.name)
                 case _:
                     node_copy = MotionStatechartNode(name=node.name)
-            destination.add_node(node_copy)
-            node_copy.index = node.index
+            motion_statechart_copy.add_node(node_copy)
+        # link parent/child
+        for node in self.get_nodes_by_type(Goal):
+            goal_copy: Goal = motion_statechart_copy.get_node_by_index(node.index)
+            for child_node in node.nodes:
+                child_node_copy = motion_statechart_copy.get_node_by_index(
+                    child_node.index
+                )
+                child_node_copy.parent_node_index = node.index
+                goal_copy.nodes.append(child_node_copy)
+        # copy conditions
+        for node in self.nodes:
+            node_copy = motion_statechart_copy.get_node_by_index(node.index)
             node_copy.start_condition = node.start_condition
             node_copy.pause_condition = node.pause_condition
             node_copy.end_condition = node.end_condition
             node_copy.reset_condition = node.reset_condition
-            if isinstance(node, Goal):
-                self._create_structure_copy(node.nodes, node_copy)
+        return motion_statechart_copy
 
     @property
     def nodes(self) -> List[MotionStatechartNode]:
@@ -632,6 +634,9 @@ class MotionStatechart(SubclassJSONSerializer):
             )
             transition.owner._set_transition(transition)
         for node in motion_statechart.nodes:
-            if node.parent_node is not None:
-                node.parent_node.nodes.append(node)
+            if node.parent_node_index is not None:
+                parent_node = motion_statechart.get_node_by_index(
+                    node.parent_node_index
+                )
+                parent_node.nodes.append(node)
         return motion_statechart

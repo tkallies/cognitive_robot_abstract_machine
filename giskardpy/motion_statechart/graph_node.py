@@ -554,7 +554,7 @@ class MotionStatechartNode(SubclassJSONSerializer):
                 value = getattr(self, field_.name)
                 json_data[field_.name] = self._attribute_to_json(value)
         if self.parent_node_index is not None:
-            json_data["parent_node_index"] = self.parent_node.index
+            json_data["parent_node_index"] = self.parent_node_index
         return json_data
 
     def _attribute_to_json(self, value: Any) -> Any:
@@ -594,9 +594,9 @@ class MotionStatechartNode(SubclassJSONSerializer):
                     "dict parameters of MotionStatechartNode are not supported yet. Use a list instead."
                 )
             node_kwargs[field_name] = field_data
-        parent_node_name = node_kwargs.pop("parent_node_index", None)
+        parent_node_index = node_kwargs.pop("parent_node_index", None)
         result = cls(**node_kwargs)
-        result.parent_node_name = parent_node_name
+        result.parent_node_index = parent_node_index
         return result
 
     def formatted_name(self, quoted: bool = False) -> str:
