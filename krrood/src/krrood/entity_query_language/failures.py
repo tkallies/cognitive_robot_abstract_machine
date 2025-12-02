@@ -101,7 +101,7 @@ class NonPositiveLimitValue(UsageError):
     Raised when a limit value for the query results is not positive.
     """
 
-    wrong_limit_value: Any
+    wrong_limit_value: int
 
     def __post_init__(self):
         self.message = (

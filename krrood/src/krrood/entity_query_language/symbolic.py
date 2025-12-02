@@ -61,28 +61,6 @@ from ..class_diagrams.wrapped_field import WrappedField
 if TYPE_CHECKING:
     from .conclusion import Conclusion
 
-_symbolic_mode = contextvars.ContextVar("symbolic_mode", default=None)
-
-
-def _set_symbolic_mode(mode: EQLMode):
-    """
-    Set symbolic construction mode.
-
-    :param mode: Can be Query or Rule.
-    """
-    _symbolic_mode.set(mode)
-
-
-def in_symbolic_mode(mode: Optional[EQLMode] = None) -> bool:
-    """
-    Check whether symbolic construction mode is currently active.
-
-    :returns: True if symbolic mode is enabled, otherwise False.
-    """
-    current_mode = _symbolic_mode.get()
-    return current_mode == mode if mode else current_mode is not None
-
-
 id_generator = IDGenerator()
 
 RWXNode.enclosed_name = "Selected Variable"
@@ -713,6 +691,26 @@ A function that maps the results of a query object descriptor to a new set of re
 """
 
 
+@dataclass(frozen=True)
+class OrderByParams(Generic[T]):
+    """
+    Parameters for ordering the results of a query object descriptor.
+    """
+    variable: CanBehaveLikeAVariable[T]
+    """
+    The variable to order by.
+    """
+    descending: bool = False
+    """
+    Whether to order the results in descending order.
+    """
+    key: Optional[Callable] = None
+    """
+    A function to extract the key from the variable value.
+    """
+
+
+
 @dataclass(eq=False, repr=False)
 class QueryObjectDescriptor(SymbolicExpression[T], ABC):
     """
@@ -723,7 +721,7 @@ class QueryObjectDescriptor(SymbolicExpression[T], ABC):
     _child_: Optional[SymbolicExpression[T]] = field(default=None)
     _selected_variables: List[CanBehaveLikeAVariable[T]] = field(default_factory=list)
     _results_mapping: List[ResultMapping] = field(init=False, default_factory=list)
-    _order_by: Optional[Tuple[Selectable, bool]] = field(default=None, init=False)
+    _order_by: Optional[OrderByParams] = field(default=None, init=False)
     _seen_results: SeenSet[Dict[int, HashedValue]] = field(
         init=False, default_factory=SeenSet
     )
@@ -733,9 +731,39 @@ class QueryObjectDescriptor(SymbolicExpression[T], ABC):
         for variable in self._selected_variables:
             variable._var_._node_.enclosed = True
 
-    def order_by(self, variable, descending: bool = False) -> Self:
-        self._order_by = (variable, descending)
+    def order_by(self, variable, descending: bool = False, key: Optional[Callable] = None) -> Self:
+        """
+        Order the results by the given variable, using the given key function in descending or ascending order.
+
+        :param variable: The variable to order by.
+        :param descending: Whether to order the results in descending order.
+        :param key: A function to extract the key from the variable value.
+        """
+        if not key:
+            key = lambda x: x
+        self._order_by = OrderByParams(variable, descending, key)
         return self
+
+    def _order(
+        self, results: Iterable[Dict[int, HashedValue]] = None
+    ) -> Iterable[Dict[int, HashedValue]]:
+        """
+        Order the results by the given order variable.
+
+        :param results: The results to be ordered.
+        :return: The ordered results.
+        """
+
+        def key(result: Dict[int, HashedValue]) -> Any:
+            variable_value = result[self._order_by.variable._id_].value
+            return self._order_by.key(variable_value)
+
+        results = sorted(
+            results,
+            key=key,
+            reverse=self._order_by.descending,
+        )
+        return results
 
     def distinct(
         self,
@@ -826,23 +854,6 @@ class QueryObjectDescriptor(SymbolicExpression[T], ABC):
             for conclusion in self._child_._conclusion_:
                 projection.update(conclusion._unique_variables_)
         return projection
-
-    def _order(
-        self, results: Iterable[Dict[int, HashedValue]] = None
-    ) -> Iterable[Dict[int, HashedValue]]:
-        """
-        Order the results by the given order variable.
-
-        :param results: The results to be ordered.
-        :return: The ordered results.
-        """
-        order_var, descending = self._order_by
-        results = sorted(
-            results,
-            key=lambda r: r[order_var._id_].value,
-            reverse=descending,
-        )
-        return results
 
     def _evaluate__(
         self,
