@@ -14,7 +14,7 @@ kernelspec:
 # Pattern matching with `match` and `entity_matching`
 
 EQL provides a concise pattern-matching API for building nested structural queries.
-Use `match(type_)(...)` to describe a nested pattern on attributes, and wrap the outermost match
+Use `matching(type_)(...)` to describe a nested pattern on attributes, and wrap the outermost match
 with `entity_matching(type_, domain)(...)` when you also need to bind a search domain.
 
 The following example shows how nested patterns translate
@@ -97,13 +97,13 @@ world = World(
 ## Matching a nested structure
 
 `entity_matching(FixedConnection, world.connections)` selects from `world.connections` items of type
-`FixedConnection`. Inner `match(...)` clauses describe constraints on attributes of that selected item.
+`FixedConnection`. Inner `matching(...)` clauses describe constraints on attributes of that selected item.
 
 ```{code-cell} ipython3
 fixed_connection_query = the(
     entity_matching(FixedConnection, world.connections)(
-        parent=match(Container)(name="Container1"),
-        child=match(Handle)(name="Handle1"),
+        parent=matching(Container)(name="Container1"),
+        child=matching(Handle)(name="Handle1"),
     )
 )
 ```
@@ -138,7 +138,7 @@ print(type(fixed_connection).__name__, fixed_connection.parent.name, fixed_conne
 
 Notes:
 - Use `entity_matching` for the outer pattern when a domain is involved; inner attributes use `match`.
-- Nested `match(...)` can be composed arbitrarily deep following your object graph.
+- Nested `matching(...)` can be composed arbitrarily deep following your object graph.
 - `entity_matching` is a syntactic sugar over the explicit `entity` + predicates form, so both are interchangeable.
 
 ## Selecting inner objects with `select()`

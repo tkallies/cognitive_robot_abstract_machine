@@ -3,7 +3,7 @@ from krrood.entity_query_language.entity import (
     entity,
     contains,
 )
-from krrood.entity_query_language.match import match
+from krrood.entity_query_language.match import matching
 from krrood.entity_query_language.quantify_entity import the, a
 from semantic_digital_twin.spatial_types import Expression
 
@@ -12,7 +12,7 @@ from semantic_digital_twin.world_description.degree_of_freedom import PositionVa
 
 
 def test_querying_equations(world_setup):
-    results = list(a(match(PositionVariable)()).evaluate())
+    results = list(a(matching(PositionVariable)()).evaluate())
     expr = results[0] + results[1]
     found_expr = the(
         entity(

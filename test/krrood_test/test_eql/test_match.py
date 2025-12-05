@@ -1,4 +1,5 @@
 import pytest
+from fontTools.varLib.interpolatableHelpers import matching_cost
 
 from krrood.entity_query_language.entity import (
     entity,
@@ -6,7 +7,7 @@ from krrood.entity_query_language.entity import (
 )
 from krrood.entity_query_language.quantify_entity import an, the, a
 from krrood.entity_query_language.match import (
-    match,
+    matching,
     match_any,
     select,
     entity_matching,
@@ -27,9 +28,9 @@ def test_match(handles_and_containers_world):
     world = handles_and_containers_world
 
     fixed_connection_query = the(
-        match(FixedConnection)(
-            parent=match(Container)(name="Container1"),
-            child=match(Handle)(name="Handle1"),
+        matching(FixedConnection)(
+            parent=matching(Container)(name="Container1"),
+            child=matching(Handle)(name="Handle1"),
         ).domain_from(world.connections)
     )
 
@@ -55,9 +56,9 @@ def test_match(handles_and_containers_world):
 def test_select(handles_and_containers_world):
     world = handles_and_containers_world
 
-    container = match(Container)(name="Container1")
-    handle = match(Handle)(name="Handle1")
-    fixed_connection = match(FixedConnection)(
+    container = matching(Container)(name="Container1")
+    handle = matching(Handle)(name="Handle1")
+    fixed_connection = matching(FixedConnection)(
             parent=container,
             child=handle,
         ).domain_from(world.connections)
@@ -87,7 +88,7 @@ def world_and_cabinets_and_specific_drawer(handles_and_containers_world):
 
 def test_match_any(world_and_cabinets_and_specific_drawer):
     world, cabinets, my_drawer = world_and_cabinets_and_specific_drawer
-    cabinet = a(match(Cabinet)(drawers=match_any([my_drawer])).domain_from(cabinets))
+    cabinet = a(matching(Cabinet)(drawers=match_any([my_drawer])).domain_from(cabinets))
     found_cabinets = list(cabinet.evaluate())
     assert len(found_cabinets) == 2
     assert cabinets[0] in found_cabinets
@@ -96,7 +97,7 @@ def test_match_any(world_and_cabinets_and_specific_drawer):
 
 def test_match_all(world_and_cabinets_and_specific_drawer):
     world, cabinets, my_drawer = world_and_cabinets_and_specific_drawer
-    cabinet = the(match(Cabinet)(drawers=match_all([my_drawer])).domain_from(cabinets))
+    cabinet = the(matching(Cabinet)(drawers=match_all([my_drawer])).domain_from(cabinets))
     found_cabinet = cabinet.evaluate()
     assert found_cabinet is cabinets[1]
 
@@ -113,7 +114,7 @@ def test_match_any_on_collection_returns_unique_parent_entities():
     cabinet2 = Cabinet(container=other_c, drawers=[drawer2])
     views = [drawer1, drawer2, cabinet1, cabinet2]
 
-    q = a(match(Cabinet)(drawers=match_any([drawer1, drawer2])).domain_from(views))
+    q = a(matching(Cabinet)(drawers=match_any([drawer1, drawer2])).domain_from(views))
 
     results = list(q.evaluate())
     # Expect exactly the two cabinets, no duplicates

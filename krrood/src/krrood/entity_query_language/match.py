@@ -47,7 +47,7 @@ class Match(Generic[T]):
         >>> @dataclass
         >>> class Drawer:
         >>>     body: Body
-        >>> drawer = match(Drawer)(body=match(Body)(name="drawer_1"))
+        >>> drawer = matching(Drawer)(body=matching(Body)(name="drawer_1"))
     """
 
     type_: Optional[Type[T]] = None
@@ -373,7 +373,7 @@ class Select(Match[T], Selectable[T]):
         return self._var_._all_variable_instances_
 
 
-def match(
+def matching(
     type_: Union[Type[T], CanBehaveLikeAVariable[T], Any, None] = None,
 ) -> Union[Type[T], CanBehaveLikeAVariable[T], Match[T]]:
     """
@@ -390,9 +390,9 @@ def match_any(
     type_: Union[Type[T], CanBehaveLikeAVariable[T], Any, None] = None,
 ) -> Union[Type[T], CanBehaveLikeAVariable[T], Match[T]]:
     """
-    Equivalent to match(type_) but for existential checks.
+    Equivalent to matching(type_) but for existential checks.
     """
-    match_ = match(type_)
+    match_ = matching(type_)
     match_.existential = True
     return match_
 
@@ -401,9 +401,9 @@ def match_all(
     type_: Union[Type[T], CanBehaveLikeAVariable[T], Any, None] = None,
 ) -> Union[Type[T], CanBehaveLikeAVariable[T], Match[T]]:
     """
-    Equivalent to match(type_) but for universal checks.
+    Equivalent to matching(type_) but for universal checks.
     """
-    match_ = match(type_)
+    match_ = matching(type_)
     match_.universal = True
     return match_
 
@@ -412,7 +412,7 @@ def select(
     type_: Union[Type[T], CanBehaveLikeAVariable[T], Any, None] = None,
 ) -> Union[Type[T], CanBehaveLikeAVariable[T], Select[T]]:
     """
-    Equivalent to match(type_) and selecting the variable to be included in the result.
+    Equivalent to matching(type_) and selecting the variable to be included in the result.
     """
     return entity_selection(type_, None)
 
