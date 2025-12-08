@@ -348,7 +348,7 @@ def test_move_tcp_waypoints(immutable_model_world):
     path = []
     for i in range(1, 3):
         new_pose = deepcopy(gripper_pose)
-        new_pose.position.z += 0.05 * i
+        new_pose.position.x -= 0.05 * i
         path.append(new_pose)
     description = MoveTCPWaypointsMotion(path, Arms.RIGHT)
     plan = SequentialPlan(context, description)
