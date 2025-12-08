@@ -2,6 +2,7 @@ import json
 import time
 from dataclasses import dataclass
 from math import radians
+from typing import Optional, Iterable
 
 import numpy as np
 import pytest
@@ -1383,25 +1384,58 @@ def test_align_planes(pr2_world: World):
 
 
 class TestVelocityTasks:
-    def _compile_and_run_until_end(self, world: "World", goal_node, limit_node):
+    def _build_msc(
+        self, goal_node, limit_node, extra_nodes: Optional[Iterable] = None
+    ) -> MotionStatechart:
         """
-        Build a small MSC: goal_node -> limit_node -> EndMotion(when_true=goal_node),
-        compile into an Executor, run until end and return (control_cycles, executor)
+        Convenience Function:
+        Build a small MSC: goal_node -> limit_node -> (extra_nodes...) -> EndMotion(when_true=goal_node)
+        Returns the MotionStatechart but does not compile or run it.
         """
         msc = MotionStatechart()
         msc.add_node(goal_node)
         msc.add_node(limit_node)
-        msc.add_node(EndMotion.when_true(goal_node))
 
+        if extra_nodes:
+            for node in extra_nodes:
+                msc.add_node(node)
+
+        msc.add_node(EndMotion.when_true(goal_node))
+        return msc
+
+    def _compile_msc_and_run_until_end(self, world: "World", goal_node, limit_node):
+        """
+        Convenience Function:
+        Build the MSC (no extra nodes), compile into an Executor,
+        run until end and return (control_cycles, executor)
+        """
+        msc = self._build_msc(goal_node=goal_node, limit_node=limit_node)
         kin_sim = Executor(world=world)
         kin_sim.compile(motion_statechart=msc)
         kin_sim.tick_until_end()
+        return kin_sim.control_cycles, kin_sim
 
-        cycles = kin_sim.control_cycles
+    def _test_observation_variable(self, goal_node, limit_node, world: "World"):
+        """
+        Tests that velocity limit's observation variable can trigger a CancelMotion
+        when the planner chooses to violate the limit.
 
-        return cycles, kin_sim
+        Expects the CancelMotion to raise the provided exception.
+        """
+        msc = self._build_msc(goal_node=goal_node, limit_node=limit_node)
+        cancel_motion = CancelMotion(exception=Exception("test"))
+        cancel_motion.start_condition = cas.trinary_logic_not(
+            limit_node.observation_variable
+        )
+        msc.add_node(cancel_motion)
 
-    def test_cartesian_position_velocity_limit(self, pr2_world: World):
+        kin_sim = Executor(world=world)
+        kin_sim.compile(motion_statechart=msc)
+
+        with pytest.raises(Exception):
+            kin_sim.tick_until_end()
+
+    def test_cartesian_position_velocity_limit(self, pr2_world: "World"):
         """
         Test for the linear velocity limits.
         """
@@ -1410,9 +1444,7 @@ class TestVelocityTasks:
 
         point = cas.Point3(1, 0, 0, reference_frame=tip)
         position_goal = CartesianPosition(
-            root_link=root,
-            tip_link=tip,
-            goal_point=point,
+            root_link=root, tip_link=tip, goal_point=point
         )
 
         # Halving the velocity should at least double the execution time
@@ -1423,11 +1455,11 @@ class TestVelocityTasks:
             max_linear_velocity=(usual_limit.max_linear_velocity / 2.1),
         )
 
-        loose_cycles, _ = self._compile_and_run_until_end(
-            goal_node=position_goal, limit_node=usual_limit, world=pr2_world
+        loose_cycles, _ = self._compile_msc_and_run_until_end(
+            world=pr2_world, goal_node=position_goal, limit_node=usual_limit
         )
-        tight_cycles, _ = self._compile_and_run_until_end(
-            goal_node=position_goal, limit_node=half_velocity_limit, world=pr2_world
+        tight_cycles, _ = self._compile_msc_and_run_until_end(
+            world=pr2_world, goal_node=position_goal, limit_node=half_velocity_limit
         )
 
         assert (
@@ -1437,12 +1469,11 @@ class TestVelocityTasks:
         low_weight_limit = CartesianVelocityLimit(
             root_link=root, tip_link=tip, weight=DefaultWeights.WEIGHT_BELOW_CA
         )
-
         self._test_observation_variable(
             goal_node=position_goal, limit_node=low_weight_limit, world=pr2_world
         )
 
-    def test_cartesian_rotation_velocity_limit(self, pr2_world: World):
+    def test_cartesian_rotation_velocity_limit(self, pr2_world: "World"):
         """
         Test for the angular velocity limits.
         """
@@ -1464,11 +1495,11 @@ class TestVelocityTasks:
             max_angular_velocity=(usual_limit.max_angular_velocity / 2.1),
         )
 
-        loose_cycles, _ = self._compile_and_run_until_end(
-            goal_node=orientation, limit_node=usual_limit, world=pr2_world
+        loose_cycles, _ = self._compile_msc_and_run_until_end(
+            world=pr2_world, goal_node=orientation, limit_node=usual_limit
         )
-        tight_cycles, _ = self._compile_and_run_until_end(
-            goal_node=orientation, limit_node=half_velocity_limit, world=pr2_world
+        tight_cycles, _ = self._compile_msc_and_run_until_end(
+            world=pr2_world, goal_node=orientation, limit_node=half_velocity_limit
         )
 
         assert (
@@ -1478,29 +1509,9 @@ class TestVelocityTasks:
         low_weight_limit = CartesianVelocityLimit(
             root_link=root, tip_link=tip, weight=DefaultWeights.WEIGHT_BELOW_CA
         )
-
         self._test_observation_variable(
             goal_node=orientation, limit_node=low_weight_limit, world=pr2_world
         )
-
-    def _test_observation_variable(self, world: "World", goal_node, limit_node):
-        """
-        Tests that velocity limits observation variable is set to False when violating the velocity limit
-        """
-        msc = MotionStatechart()
-        msc.add_node(goal_node)
-        msc.add_node(limit_node)
-        cancel_motion = CancelMotion(exception=Exception("test"))
-        cancel_motion.start_condition = cas.trinary_logic_not(
-            limit_node.observation_variable
-        )
-        msc.add_node(cancel_motion)
-        msc.add_node(EndMotion.when_true(goal_node))
-
-        kin_sim = Executor(world=world)
-        kin_sim.compile(motion_statechart=msc)
-        with pytest.raises(Exception):
-            kin_sim.tick_until_end()
 
 
 def test_transition_triggers():
