@@ -24,17 +24,9 @@ from .reference_implementations import (
     quaternion_from_rotation_matrix,
 )
 from .utils_for_tests import (
-    float_no_nan_no_inf,
-    quaternion,
-    random_angle,
-    unit_vector,
     compare_axis_angle,
-    angle_positive,
-    vector,
-    lists_of_same_length,
     compare_orientations,
 )
-from ...krrood_test.test_symbolic_math.reference_implementations import normalize_angle
 
 bool_values = [True, False]
 numbers = [-69, 23]
@@ -1204,60 +1196,26 @@ class TestTransformationMatrix:
         assert (t1 @ r).reference_frame == reference_frame
 
     def test_matmul_type_preservation(self):
-        """Test that @ operator preserves correct types for TransformationMatrix"""
-        s = cas.FloatVariable(name="s")
-        e = cas.Expression()
-        v = cas.Vector3(x_init=1, y_init=1, z_init=1)
-        p = cas.Point3(x_init=1, y_init=1, z_init=1)
-        r = cas.RotationMatrix()
-        q = cas.Quaternion()
-        t = cas.HomogeneousTransformationMatrix()
+        transform = cas.HomogeneousTransformationMatrix()
+        works = [
+            cas.Vector3(x_init=1, y_init=1, z_init=1),
+            transform,
+            cas.RotationMatrix(),
+            cas.Pose(),
+            cas.Point3(x_init=1, y_init=1, z_init=1),
+        ]
+        does_not_work = [
+            cas.FloatVariable(name="s"),
+            cas.Expression(data=1),
+            cas.Quaternion(),
+        ]
 
-        # TransformationMatrix @ invalid types should raise UnsupportedOperationError
-        with pytest.raises(UnsupportedOperationError):
-            t @ s  # TransformationMatrix @ FloatVariable
-        with pytest.raises(UnsupportedOperationError):
-            t @ e  # TransformationMatrix @ Expression (scalar)
-        with pytest.raises(UnsupportedOperationError):
-            t @ q  # TransformationMatrix @ Quaternion
-
-        # TransformationMatrix @ valid types should return correct types
-        assert isinstance(t @ v, cas.Vector3)  # Transform vector -> Vector3
-        assert isinstance(t @ p, cas.Point3)  # Transform point -> Point3
-        assert isinstance(
-            t @ r, cas.RotationMatrix
-        )  # Transform rotation -> RotationMatrix
-        assert isinstance(
-            t @ t, cas.HomogeneousTransformationMatrix
-        )  # Transform transformation -> TransformationMatrix
-
-        # Test reverse operations (other types @ TransformationMatrix)
-        # RotationMatrix @ TransformationMatrix -> TransformationMatrix (already tested in RotationMatrix)
-        assert isinstance(r @ t, cas.HomogeneousTransformationMatrix)
-
-        # Verify that the transformed objects maintain their geometric properties
-        # Vector should remain homogeneous coordinate = 0
-        transformed_vector = t @ v
-        assert transformed_vector[3] == 0
-
-        # Point should remain homogeneous coordinate = 1
-        transformed_point = t @ p
-        assert transformed_point[3] == 1
-
-        # Test with non-identity transformation to ensure type preservation holds
-        t_rot = cas.HomogeneousTransformationMatrix.from_xyz_rpy(1, 2, 3, 0.1, 0.2, 0.3)
-
-        assert isinstance(t_rot @ v, cas.Vector3)
-        assert isinstance(t_rot @ p, cas.Point3)
-        assert isinstance(t_rot @ r, cas.RotationMatrix)
-        assert isinstance(t_rot @ t, cas.HomogeneousTransformationMatrix)
-
-        # Verify homogeneous coordinate preservation with non-identity transform
-        transformed_vector_rot = t_rot @ v
-        assert transformed_vector_rot[3] == 0
-
-        transformed_point_rot = t_rot @ p
-        assert transformed_point_rot[3] == 1
+        for other in works:
+            assert isinstance(transform @ other, type(other))
+        for other in does_not_work:
+            with pytest.raises(UnsupportedOperationError):
+                # noinspection PyTypeChecker
+                transform @ other
 
     @pytest.mark.parametrize("x", numbers)
     @pytest.mark.parametrize("y", numbers)

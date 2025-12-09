@@ -376,34 +376,15 @@ class HomogeneousTransformationMatrix(
         self, other: GenericHomogeneousSpatialType
     ) -> GenericHomogeneousSpatialType:
         if isinstance(
-            other, (Vector3, Point3, RotationMatrix, HomogeneousTransformationMatrix)
+            other,
+            (Vector3, Point3, RotationMatrix, HomogeneousTransformationMatrix, Pose),
         ):
-            result = ca.mtimes(self.casadi_sx, other.casadi_sx)
-            if isinstance(other, Vector3):
-                result = Vector3.from_iterable(
-                    result, reference_frame=self.reference_frame
-                )
-                return result
-            if isinstance(other, Point3):
-                result = Point3.from_iterable(
-                    result, reference_frame=self.reference_frame
-                )
-                return result
-            if isinstance(other, RotationMatrix):
-                result = RotationMatrix(
-                    data=result,
-                    reference_frame=self.reference_frame,
-                    sanity_check=False,
-                )
-                return result
+            result_sx = ca.mtimes(self.casadi_sx, other.casadi_sx)
+            result = type(other).from_casadi_sx(casadi_sx=result_sx)
+            result.reference_frame = self.reference_frame
             if isinstance(other, HomogeneousTransformationMatrix):
-                result = HomogeneousTransformationMatrix(
-                    data=result,
-                    reference_frame=self.reference_frame,
-                    child_frame=other.child_frame,
-                    sanity_check=False,
-                )
-                return result
+                result.child_frame = other.child_frame
+            return result
         raise UnsupportedOperationError("dot", self, other)
 
     def __matmul__(self, other: GenericSpatialType) -> GenericSpatialType:
