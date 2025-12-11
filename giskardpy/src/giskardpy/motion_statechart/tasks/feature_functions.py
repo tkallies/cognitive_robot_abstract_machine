@@ -19,16 +19,30 @@ from semantic_digital_twin.world_description.world_entity import (
 @dataclass(eq=False, repr=False)
 class FeatureFunctionGoal(Task):
     """
-    Parent class of all feature function tasks. It instantiates the controlled and reference features in the correct
-    way and sets the debug function.
+    Base class for all feature function tasks that operate on geometric features.
+
+    This class provides the foundation for tasks that need to control and reference
+    geometric features (points or vectors) in different coordinate frames. It handles
+    the transformation of features between frames and sets up debug visualizations.
+
+    The class automatically transforms the controlled feature from the tip frame and
+    the reference feature from the root frame into a common coordinate system for
+    comparison and control.
+
+    .. note::
+       This is an abstract base class and should not be instantiated directly.
+       Concrete implementations should inherit from this class and specify their
+       controlled and reference features.
     """
 
     tip_link: KinematicStructureEntity = field(kw_only=True)
-    """tip link of the kinematic chain."""
+    """The link where the controlled feature is attached. Defines the moving frame of reference."""
     root_link: KinematicStructureEntity = field(kw_only=True)
-    """root link of the kinematic chain."""
+    """The static reference link. Defines the fixed frame of reference."""
     controlled_feature: Union[cas.Point3, cas.Vector3] = field(init=False)
+    """The geometric feature (point or vector) that is being controlled, expressed in the tip link frame."""
     reference_feature: Union[cas.Point3, cas.Vector3] = field(init=False)
+    """The geometric feature (point or vector) that serves as reference, expressed in the root link frame."""
 
     def build(self, context: BuildContext) -> NodeArtifacts:
         artifacts = NodeArtifacts()
@@ -84,20 +98,29 @@ class FeatureFunctionGoal(Task):
 @dataclass(eq=False, repr=False)
 class AlignPerpendicular(FeatureFunctionGoal):
     """
-    Aligns the tip_normal to the reference_normal such that they are perpendicular to each other.
-    :param tip_normal: Tip normal to be controlled.
-    :param reference_normal: Reference normal to align the tip normal to.
+    Creates a motion that aligns two normal vectors to be perpendicular (90 degrees) to each other.
+
+    This goal generates constraints that drive the angle between the tip_normal and
+    reference_normal towards 90 degrees (π/2 radians), while respecting the maximum velocity limit.
+    The motion is considered complete when the absolute difference between the current angle
+    and 90 degrees is less than the specified threshold.
     """
 
     tip_link: KinematicStructureEntity = field(kw_only=True)
-    """tip link of the kinematic chain."""
+    """The link where the controlled normal vector is attached."""
     root_link: KinematicStructureEntity = field(kw_only=True)
-    """root link of the kinematic chain."""
+    """The reference link defining the fixed coordinate frame."""
     tip_normal: cas.Vector3 = field(kw_only=True)
+    """The normal vector to be controlled, defined in the tip link frame."""
     reference_normal: cas.Vector3 = field(kw_only=True)
+    """The reference normal vector to align against, defined in the root link frame."""
     weight: float = field(default=DefaultWeights.WEIGHT_BELOW_CA, kw_only=True)
+    """Priority weight for the alignment constraint in the optimization problem."""
     max_vel: float = field(default=0.2, kw_only=True)
+    """Maximum allowed angular velocity for the alignment motion in radians per second."""
     threshold: float = field(default=0.01, kw_only=True)
+    """Tolerance threshold in radians. The goal is considered achieved when the absolute
+    difference between the current angle and 90 degrees is below this value."""
 
     def build(self, context: BuildContext) -> NodeArtifacts:
         self.controlled_feature = self.tip_normal
