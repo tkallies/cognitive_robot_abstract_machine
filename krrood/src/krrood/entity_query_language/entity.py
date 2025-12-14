@@ -34,7 +34,10 @@ from .symbolic import (
     Flatten,
     ForAll,
     Exists,
-    Literal, Selectable, DomainType, )
+    Literal,
+    Selectable,
+    DomainType,
+)
 
 from .predicate import (
     Predicate,
@@ -51,67 +54,26 @@ The possible types for conditions.
 """
 
 
-def entity(
-    selected_variable: T,
-    *properties: ConditionType,
-) -> Entity[T]:
+def entity(selected_variable: T) -> Entity[T]:
     """
-    Create an entity descriptor from a selected variable and its properties.
+    Create an entity descriptor for a selected variable.
 
     :param selected_variable: The variable to select in the result.
-    :type selected_variable: T
-    :param properties: Conditions that define the entity.
-    :type properties: Union[SymbolicExpression, bool]
     :return: Entity descriptor.
-    :rtype: Entity[T]
     """
-    selected_variables, expression = _extract_variables_and_expression(
-        [selected_variable], *properties
-    )
-    return Entity(_selected_variables=selected_variables, _child_=expression)
+    return Entity(_selected_variables=[selected_variable])
 
 
 def set_of(
-    selected_variables: Iterable[T],
-    *properties: ConditionType,
+    *selected_variables: T,
 ) -> SetOf[T]:
     """
-    Create a set descriptor from selected variables and their properties.
+    Create a set descriptor for the selected variables.
 
-    :param selected_variables: Iterable of variables to select in the result set.
-    :type selected_variables: Iterable[T]
-    :param properties: Conditions that define the set.
-    :type properties: Union[SymbolicExpression, bool]
+    :param selected_variables: The variables to select in the result set.
     :return: Set descriptor.
-    :rtype: SetOf[T]
     """
-    selected_variables, expression = _extract_variables_and_expression(
-        selected_variables, *properties
-    )
-    return SetOf(_selected_variables=selected_variables, _child_=expression)
-
-
-def _extract_variables_and_expression(
-    selected_variables: Iterable[T], *properties: ConditionType
-) -> Tuple[List[T], SymbolicExpression]:
-    """
-    Extracts the variables and expressions from the selected variables.
-
-    :param selected_variables: Iterable of variables to select in the result set.
-    :param properties: Conditions on the selected variables.
-    :return: Tuple of selected variables and expressions.
-    """
-    expression_list = list(properties)
-    selected_variables = list(selected_variables)
-    expression = None
-    if len(expression_list) > 0:
-        literal_expressions = [exp for exp in expression_list if not isinstance(exp, SymbolicExpression)]
-        if literal_expressions:
-            raise LiteralConditionError(literal_expressions)
-        expression = (
-            and_(*expression_list) if len(expression_list) > 1 else expression_list[0]
-        )
-    return selected_variables, expression
+    return SetOf(_selected_variables=list(selected_variables))
 
 
 def let(
