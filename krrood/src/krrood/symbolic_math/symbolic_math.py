@@ -446,6 +446,26 @@ class SymbolicType(Symbol):
         else:
             return _np.array(_ca.evalf(self.casadi_sx))
 
+    def safe_division(
+        self,
+        other: ScalarData,
+        if_nan: _te.Optional[ScalarData] = None,
+    ) -> Expression:
+        """
+        A version of division where no sub-expression is ever NaN. The expression would evaluate to 'if_nan', but
+        you should probably never work with the 'if_nan' result. However, if one sub-expressions is NaN, the whole expression
+        evaluates to NaN, even if it is only in a branch of an if-else, that is not returned.
+        This method is a workaround for such cases.
+        """
+        other = Expression(data=other)
+        if if_nan is None:
+            if_nan = 0
+        if_nan = Expression(data=if_nan)
+        save_denominator = if_eq_zero(
+            condition=other, if_result=Expression(data=1), else_result=other
+        )
+        return if_eq_zero(other, if_result=if_nan, else_result=self / save_denominator)
+
     def compile(
         self,
         parameters: _te.Optional[_te.List[_te.List[FloatVariable]]] = None,
@@ -515,98 +535,6 @@ class SymbolicType(Symbol):
 
     def __neg__(self) -> Expression:
         return Expression(self.casadi_sx.__neg__())
-
-
-class BasicOperatorMixin:
-    """
-    Base class providing arithmetic operations for symbolic types.
-    """
-
-    casadi_sx: _ca.SX
-    """
-    Reference to the casadi data structure of type casadi.SX
-    """
-
-    def _binary_operation(
-        self, other: ScalarData, operation: _te.Callable, reverse: bool = False
-    ) -> Expression:
-        """
-        Performs a binary operation between the current instance and another operand.
-
-        FloatVariable only allows ScalarData on the righthand sight and implements the reverse version only for NumericalScalaer
-
-        :param other: The operand to be used in the binary operation. Either `ScalarData`
-            or `NumericalScalar` types are expected, depending on the context.
-        :param reverse: A boolean indicating whether the operation is a reverse operation.
-            Defaults to `False`.
-        :return: An `Expression` instance resulting from the binary operation, or
-            `NotImplemented` if the operand type does not match the expected type.
-        """
-        if reverse:
-            # For reverse operations, check if other is NumericalScalar
-            if not isinstance(other, NumericalScalar):
-                return NotImplemented
-            return Expression(operation(other, self.casadi_sx))
-        else:
-            # For regular operations, check if other is ScalarData
-            if isinstance(other, SymbolicScalar):
-                other = other.casadi_sx
-            elif not isinstance(other, NumericalScalar):
-                return NotImplemented
-            return Expression(operation(self.casadi_sx, other))
-
-    # %% logical operators
-
-    def __invert__(self) -> Expression:
-        return logic_not(self.casadi_sx)
-
-    def __eq__(self, other: ScalarData) -> Expression:
-        if isinstance(other, SymbolicType):
-            other = other.casadi_sx
-        return Expression(self.casadi_sx.__eq__(other))
-
-    def __ne__(self, other):
-        if isinstance(other, SymbolicType):
-            other = other.casadi_sx
-        return Expression(self.casadi_sx.__ne__(other))
-
-    def __or__(self, other: ScalarData) -> Expression:
-        return logic_or(self.casadi_sx, other)
-
-    def __and__(self, other: ScalarData) -> Expression:
-        return logic_and(self.casadi_sx, other)
-
-    def __lt__(self, other: ScalarData) -> Expression:
-        return self._binary_operation(other, _operator.lt)
-
-    def __le__(self, other: ScalarData) -> Expression:
-        return self._binary_operation(other, _operator.le)
-
-    def __gt__(self, other: ScalarData) -> Expression:
-        return self._binary_operation(other, _operator.gt)
-
-    def __ge__(self, other: ScalarData) -> Expression:
-        return self._binary_operation(other, _operator.ge)
-
-    def safe_division(
-        self,
-        other: ScalarData,
-        if_nan: _te.Optional[ScalarData] = None,
-    ) -> Expression:
-        """
-        A version of division where no sub-expression is ever NaN. The expression would evaluate to 'if_nan', but
-        you should probably never work with the 'if_nan' result. However, if one sub-expressions is NaN, the whole expression
-        evaluates to NaN, even if it is only in a branch of an if-else, that is not returned.
-        This method is a workaround for such cases.
-        """
-        other = Expression(data=other)
-        if if_nan is None:
-            if_nan = 0
-        if_nan = Expression(data=if_nan)
-        save_denominator = if_eq_zero(
-            condition=other, if_result=Expression(data=1), else_result=other
-        )
-        return if_eq_zero(other, if_result=if_nan, else_result=self / save_denominator)
 
 
 @_dataclasses.dataclass(eq=False)
@@ -937,6 +865,18 @@ class Expression(SymbolicType):
 class Scalar(Expression):
     def __init__(self, data: bool | int | _IntEnum | float = 0):
         self.casadi_sx = _ca.SX(data)
+
+    @classmethod
+    def const_false(cls) -> _te.Self:
+        return cls(False)
+
+    @classmethod
+    def const_trinary_unknown(cls) -> _te.Self:
+        return cls(0.5)
+
+    @classmethod
+    def const_true(cls) -> _te.Self:
+        return cls(True)
 
     def __bool__(self) -> bool:
         """
@@ -1288,16 +1228,12 @@ def abs(x: SymbolicType) -> Expression:
     return Expression(result)
 
 
-def max(x: ScalarData, y: ScalarData) -> Expression:
-    x = to_sx(x)
-    y = to_sx(y)
-    return Expression(_ca.fmax(x, y))
+def max(x: Scalar, y: Scalar) -> Scalar:
+    return type(x).from_casadi_sx(_ca.fmax(x.casadi_sx, y.casadi_sx))
 
 
-def min(x: ScalarData, y: ScalarData) -> Expression:
-    x = to_sx(x)
-    y = to_sx(y)
-    return Expression(_ca.fmin(x, y))
+def min(x: Scalar, y: Scalar) -> Scalar:
+    return type(x).from_casadi_sx(_ca.fmin(x.casadi_sx, y.casadi_sx))
 
 
 def limit(
@@ -1481,13 +1417,11 @@ def gauss(n: ScalarData) -> Expression:
 
 
 # %% binary logic
-BinaryTrue = Expression(data=True)
-BinaryFalse = Expression(data=False)
 
 
 def is_const_binary_false(expression: Expression) -> bool:
     try:
-        return bool((expression == BinaryFalse).to_np())
+        return bool((expression == Scalar.const_false).to_np())
     except Exception as e:
         return False
 
@@ -1497,11 +1431,11 @@ def logic_and(*args: ScalarData) -> ScalarData:
     # if there is any False, return False
     # not x because all x that are found are False
     if any(not x for x in args if is_const_binary_false(x)):
-        return BinaryFalse
+        return Scalar.const_false()
     # filter all True
     args = [x for x in args if not is_const_binary_true(x)]
     if len(args) == 0:
-        return BinaryTrue
+        return Scalar.const_true()
     if len(args) == 1:
         return args[0]
     if len(args) == 2:
@@ -1531,12 +1465,12 @@ def logic_or(*args: ScalarData, simplify: bool = True) -> ScalarData:
     assert len(args) >= 2, "and must be called with at least 2 arguments"
     # if there is any True, return True
     if simplify and any(x for x in args if is_const_binary_true(x)):
-        return BinaryTrue
+        return Scalar.const_true()
     # filter all False
     if simplify:
         args = [x for x in args if not is_const_binary_false(x)]
     if len(args) == 0:
-        return BinaryFalse
+        return Scalar(0)
     if len(args) == 1:
         return args[0]
     if len(args) == 2:
@@ -1549,19 +1483,16 @@ def logic_or(*args: ScalarData, simplify: bool = True) -> ScalarData:
 
 def is_const_binary_true(expression: Expression) -> bool:
     try:
-        equality_expr = expression == BinaryTrue
+        equality_expr = expression == Scalar.const_true()
         return bool(equality_expr.to_np())
     except Exception as e:
         return False
 
 
 # %% trinary logic
-TrinaryFalse: Expression = Expression(data=0.0)
-TrinaryUnknown: Expression = Expression(data=0.5)
-TrinaryTrue: Expression = Expression(data=1.0)
 
 
-def trinary_logic_not(expression: ScalarData) -> Expression:
+def trinary_logic_not(expression: Scalar) -> Scalar:
     """
             |   Not
     ------------------
@@ -1569,10 +1500,10 @@ def trinary_logic_not(expression: ScalarData) -> Expression:
     Unknown | Unknown
     False   |  True
     """
-    return Expression(data=1 - expression)
+    return Scalar.from_casadi_sx(1 - expression.casadi_sx)
 
 
-def trinary_logic_and(*args: ScalarData) -> ScalarData:
+def trinary_logic_and(*args: Scalar) -> Scalar:
     """
       AND   |  True   | Unknown | False
     ------------------+---------+-------
@@ -1583,22 +1514,20 @@ def trinary_logic_and(*args: ScalarData) -> ScalarData:
     assert len(args) >= 2, "and must be called with at least 2 arguments"
     # if there is any False, return False
     if any(x for x in args if is_const_binary_false(x)):
-        return TrinaryFalse
+        return Scalar.const_false()
     # filter all True
     args = [x for x in args if not is_const_binary_true(x)]
     if len(args) == 0:
-        return TrinaryTrue
+        return Scalar.const_true()
     if len(args) == 1:
         return args[0]
     if len(args) == 2:
-        cas_a = to_sx(args[0])
-        cas_b = to_sx(args[1])
-        return min(cas_a, cas_b)
+        return min(args[0], args[1])
     else:
         return trinary_logic_and(args[0], trinary_logic_and(*args[1:]))
 
 
-def trinary_logic_or(*args: ScalarData) -> ScalarData:
+def trinary_logic_or(*args: Scalar) -> Scalar:
     """
        OR   |  True   | Unknown | False
     ------------------+---------+-------
@@ -1609,39 +1538,37 @@ def trinary_logic_or(*args: ScalarData) -> ScalarData:
     assert len(args) >= 2, "and must be called with at least 2 arguments"
     # if there is any False, return False
     if any(x for x in args if is_const_binary_true(x)):
-        return TrinaryTrue
+        return Scalar.const_true()
     # filter all True
     args = [x for x in args if not is_const_binary_true(x)]
     if len(args) == 0:
-        return TrinaryFalse
+        return Scalar.const_false()
     if len(args) == 1:
         return args[0]
     if len(args) == 2:
-        cas_a = to_sx(args[0])
-        cas_b = to_sx(args[1])
-        return max(cas_a, cas_b)
+        return max(args[0], args[1])
     else:
         return trinary_logic_or(args[0], trinary_logic_or(*args[1:]))
 
 
 def is_const_trinary_true(expression: Expression) -> bool:
     """
-    Checks if the expression has not free variables and is equal to TrinaryTrue.
-    If you need this check as an expression use expression == TrinaryTrue.
+    Checks if the expression has not free variables and is equal to Scalar(1.
+    If you need this check as an expression use expression == Scalar(1.
     """
     try:
-        return bool((expression == TrinaryTrue).to_np())
+        return bool((expression == Scalar.const_true()).to_np())
     except Exception as e:
         return False
 
 
 def is_const_trinary_false(expression: Expression) -> bool:
     """
-    Checks if the expression has not free variables and is equal to TrinaryFalse.
-    If you need this check as an expression use expression == TrinaryFalse.
+    Checks if the expression has not free variables and is equal to Scalar(0.
+    If you need this check as an expression use expression == Scalar(0.
     """
     try:
-        return bool((expression == TrinaryFalse).to_np())
+        return bool((expression == Scalar.const_false()).to_np())
     except Exception as e:
         return False
 
@@ -1652,7 +1579,7 @@ def is_const_trinary_unknown(expression: Expression) -> bool:
     If you need this check as an expression use expression == TrinaryUnknown.
     """
     try:
-        return bool((expression == TrinaryUnknown).to_np())
+        return bool((expression == Scalar.const_trinary_unknown()).to_np())
     except Exception as e:
         return False
 
