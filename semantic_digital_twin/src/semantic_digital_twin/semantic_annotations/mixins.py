@@ -351,7 +351,31 @@ class HasRevoluteConnection(HasActiveConnection):
 
 
 @dataclass(eq=False)
-class HasHinge(HasRevoluteConnection, ABC):
+class SemanticAssociation(ABC):
+
+    def get_new_parent_T_self(
+        self: HasBody | Self, parent: HasBody
+    ) -> TransformationMatrix:
+        return parent.body.global_pose.inverse() @ self.body.global_pose
+
+    def resolve_grandparent(self: HasBody | Self, parent: HasBody):
+        hinge_body = parent.body
+        hinge_parent = hinge_body.parent_connection.parent
+        new_hinge_parent = (
+            hinge_parent
+            if hinge_parent != self.body
+            else self.body.parent_kinematic_structure_entity
+        )
+        return new_hinge_parent
+
+    def get_self_T_new_child(
+        self: HasBody | Self, child: HasBody
+    ) -> TransformationMatrix:
+        return self.body.global_pose.inverse() @ child.body.global_pose
+
+
+@dataclass(eq=False)
+class HasHinge(HasRevoluteConnection, SemanticAssociation, ABC):
     """
     A mixin class for semantic annotations that have hinge joints.
     """
@@ -380,18 +404,10 @@ class HasHinge(HasRevoluteConnection, ABC):
             raise ValueError("Hinge must be part of the same world as the door.")
 
         world = self._world
-
-        world_T_hinge = hinge.body.global_pose
-        world_T_self = self.body.global_pose
-        hinge_T_self = world_T_hinge.inverse() @ world_T_self
-
         hinge_body = hinge.body
-        hinge_parent = hinge_body.parent_connection.parent
-        new_hinge_parent = (
-            hinge_parent
-            if hinge_parent != self.body
-            else self.body.parent_kinematic_structure_entity
-        )
+        hinge_T_self = self.get_new_parent_T_self(hinge)
+        new_hinge_parent = self.resolve_grandparent(hinge)
+
         if connection_limits is not None:
             if connection_limits[0].position <= connection_limits[1].position:
                 raise ValueError("Upper limit must be greater than lower limit.")
@@ -410,11 +426,11 @@ class HasHinge(HasRevoluteConnection, ABC):
                 parent_T_connection_expression=hinge_T_self,
             )
             world.add_connection(hinge_C_self)
-
-            parent_C_hinge = hinge_body.parent_connection
             new_parent_T_hinge = world._forward_kinematic_manager.compute(
                 new_hinge_parent, hinge_body
             )
+
+            parent_C_hinge = hinge.body.parent_connection
             world.remove_connection(parent_C_hinge)
 
             dof = DegreeOfFreedom(
@@ -618,7 +634,7 @@ HandlePosition = Union[SemanticPositionDescription, TransformationMatrix]
 
 
 @dataclass(eq=False)
-class HasHandle(ABC):
+class HasHandle(SemanticAssociation, ABC):
 
     handle: Optional[Handle] = None
     """
@@ -628,7 +644,6 @@ class HasHandle(ABC):
     def add_handle(
         self: HasBody | Self,
         handle: Handle,
-        handle_position: HandlePosition,
     ):
         """
         Adds a handle to the parent world with a fixed connection.
@@ -637,13 +652,23 @@ class HasHandle(ABC):
         to the parent world.
         :param parent_world: The world to which the handle will be added.
         """
-        connection = FixedConnection(
-            parent=self.body,
-            child=handle.body,
-            parent_T_connection_expression=self._resolve_parent_T_handle(
-                handle_position
-            ),
-        )
+        if handle._world != self._world:
+            raise ValueError("Hinge must be part of the same world as the door.")
+
+        world = self._world
+        handle_body = handle.body
+        self_T_handle = self.get_self_T_new_child(handle)
+
+        with world.modify_world():
+            parent_C_handle = handle.body.parent_connection
+            world.remove_connection(parent_C_handle)
+
+            self_C_handle = FixedConnection(
+                parent=self.body,
+                child=handle_body,
+                parent_T_connection_expression=self_T_handle,
+            )
+            world.add_connection(self_C_handle)
 
 
 @dataclass(eq=False)

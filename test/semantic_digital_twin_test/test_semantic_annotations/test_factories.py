@@ -162,10 +162,14 @@ class TestFactories(unittest.TestCase):
         handle = Handle.create_with_new_body_in_world(
             name=PrefixedName("handle"),
             world=world,
-            parent=door.body,
+            parent=hinge.body,
         )
 
+        assert hinge.body == handle.body.parent_kinematic_structure_entity
+
         door.add_handle(handle)
+
+        assert door.body == handle.body.parent_kinematic_structure_entity
 
     # def test_double_door_factory(self):
     #     handle_factory = HandleFactory(name=PrefixedName("handle"))
