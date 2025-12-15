@@ -127,9 +127,7 @@ def _create_condition(
     while current_node.parent_node is not None:
         parent_cond = condition_getter(current_node.parent_node)
         cond_expr = parent_cond == expected_value
-        condition = (
-            cond_expr if condition is None else combine_func(condition, cond_expr)
-        )
+        condition = combine_func(condition, cond_expr)
         current_node = current_node.parent_node
     return condition
 
