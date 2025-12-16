@@ -286,3 +286,19 @@ class EnumJSONSerializer(ExternalClassJSONSerializer[enum.Enum]):
         cls, data: Dict[str, Any], clazz: Type[enum.Enum], **kwargs
     ) -> enum.Enum:
         return clazz[data["name"]]
+
+
+@dataclass
+class ExceptionJSONSerializer(ExternalClassJSONSerializer[Exception]):
+    @classmethod
+    def to_json(cls, obj: Exception) -> Dict[str, Any]:
+        return {
+            JSON_TYPE_NAME: get_full_class_name(type(obj)),
+            "value": str(obj),
+        }
+
+    @classmethod
+    def from_json(
+        cls, data: Dict[str, Any], clazz: Type[Exception], **kwargs
+    ) -> Exception:
+        return Exception(data["value"])
