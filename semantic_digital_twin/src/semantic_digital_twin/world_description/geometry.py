@@ -17,9 +17,9 @@ from random_events.interval import SimpleInterval, Bound, closed
 from random_events.product_algebra import SimpleEvent
 from typing_extensions import Optional, List, Dict, Any, Self, Tuple
 
+from krrood.symbolic_math.symbolic_math import Scalar
 from ..datastructures.variables import SpatialVariables
 from ..spatial_types import HomogeneousTransformationMatrix, Point3
-from ..spatial_types.spatial_types import Expression
 from ..utils import IDGenerator
 
 id_generator = IDGenerator()
@@ -643,12 +643,7 @@ class BoundingBox:
         """
         Check if the bounding box contains a point.
         """
-        x, y, z = (
-            (point.x.to_np(), point.y.to_np(), point.z.to_np())
-            if isinstance(point.z, Expression)
-            else (point.x, point.y, point.z)
-        )
-
+        x, y, z = (float(point.x), float(point.y), float(point.z))
         return self.simple_event.contains((x, y, z))
 
     @classmethod

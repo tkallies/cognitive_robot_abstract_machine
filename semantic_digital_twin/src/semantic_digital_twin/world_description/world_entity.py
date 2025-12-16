@@ -37,6 +37,7 @@ from typing_extensions import (
 from typing_extensions import List, Optional, TYPE_CHECKING, Tuple
 from typing_extensions import Set
 
+from krrood.symbolic_math.symbolic_math import Vector, Matrix
 from .geometry import TriangleMesh
 from .inertial_properties import Inertial
 from .shape_collection import ShapeCollection, BoundingBoxCollection
@@ -48,7 +49,6 @@ from ..exceptions import ReferenceFrameMismatchError
 from ..spatial_types import spatial_types as cas
 from ..spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
-    Expression,
     Point3,
 )
 from ..utils import IDGenerator, type_string_to_type, camel_case_split
@@ -1031,10 +1031,10 @@ class Connection(WorldEntity, SubclassJSONSerializer):
             f"Origin can not be set for Connection: {self.__class__.__name__}"
         )
 
-    def origin_as_position_quaternion(self) -> Expression:
+    def origin_as_position_quaternion(self) -> Matrix:
         position = self.origin_expression.to_position()[:3]
         orientation = self.origin_expression.to_quaternion()
-        return cas.Expression.vstack([position, orientation]).T
+        return Matrix.vstack([position, orientation]).T
 
     @property
     def dofs(self) -> Set[DegreeOfFreedom]:

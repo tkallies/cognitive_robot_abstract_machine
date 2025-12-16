@@ -1,22 +1,32 @@
 from __future__ import annotations
 
-import builtins as _builtins
-import copy as _copy
-import dataclasses as _dataclasses
-import functools as _functools
-import math as _math
+import builtins
+import copy
+import math
 import operator
-import sys as _sys
-from collections import Counter as _Counter
-from dataclasses import field
-from enum import IntEnum as _IntEnum
+import sys
+from collections import Counter
+from dataclasses import field, dataclass, InitVar
+from enum import IntEnum
+from functools import partial
 
-import casadi as _ca
-import numpy as _np
+import casadi as ca
 import numpy as np
-import typing_extensions as _te
-from scipy import sparse as _sp
-from typing_extensions import ClassVar as _ClassVar, Iterable
+from scipy import sparse as sp
+from typing_extensions import (
+    ClassVar,
+    Iterable,
+    Tuple,
+    Sequence,
+    Self,
+    Callable,
+    Any,
+    List,
+    Optional,
+    Dict,
+    TypeVar,
+    Type,
+)
 
 from krrood.entity_query_language.predicate import Symbol
 from krrood.symbolic_math.exceptions import (
@@ -30,39 +40,37 @@ from krrood.symbolic_math.exceptions import (
     WrongDimensionsError,
 )
 
-EPS: float = _sys.float_info.epsilon * 4.0
+EPS: float = sys.float_info.epsilon * 4.0
 
 
-@_dataclasses.dataclass(frozen=True)
+@dataclass(frozen=True)
 class VariableGroup:
     """
     A homogeneous, ordered group of variables that forms one input block.
     """
 
-    variables: _te.Tuple[FloatVariable, ...]
+    variables: Tuple[FloatVariable, ...]
 
     def __len__(self) -> int:
         return len(self.variables)
 
 
-@_dataclasses.dataclass(frozen=True)
+@dataclass(frozen=True)
 class VariableParameters:
     """
     A collection of variable groups that define the input blocks of a compiled function.
     """
 
-    groups: _te.Tuple[VariableGroup, ...]
+    groups: Tuple[VariableGroup, ...]
 
     def __len__(self) -> int:
         return len(self.groups)
 
-    def flatten(self) -> _te.Tuple[FloatVariable, ...]:
+    def flatten(self) -> Tuple[FloatVariable, ...]:
         return tuple(v for g in self.groups for v in g.variables)
 
     @classmethod
-    def from_lists(
-        cls, groups: _te.List[_te.List[FloatVariable]]
-    ) -> VariableParameters:
+    def from_lists(cls, groups: List[List[FloatVariable]]) -> VariableParameters:
         return cls(groups=tuple(VariableGroup(tuple(g)) for g in groups))
 
 
@@ -72,16 +80,16 @@ class _BaseArithmeticMixin:
     CasADi SX and delegating to operations, then wrapping the result via `_wrap`.
     """
 
-    _wrap: _ClassVar[_te.Callable[[_ca.SX], _te.Any]]
+    _wrap: ClassVar[Callable[[ca.SX], Any]]
 
-    def _binary(self, other, op: _te.Callable[[_ca.SX, _ca.SX], _ca.SX]):
+    def _binary(self, other, op: Callable[[ca.SX, ca.SX], ca.SX]):
         if not isinstance(other, ScalarData):
             return NotImplemented
         a = to_sx(self)
         b = to_sx(other)
         return self._wrap(op(a, b))
 
-    def _rbinary(self, other, op: _te.Callable[[_ca.SX, _ca.SX], _ca.SX]):
+    def _rbinary(self, other, op: Callable[[ca.SX, ca.SX], ca.SX]):
         if not isinstance(other, ScalarData):
             return NotImplemented
         a = to_sx(other)
@@ -119,16 +127,16 @@ class _BaseArithmeticMixin:
         return self._rbinary(other, operator.pow)
 
     def __floordiv__(self, other: ScalarData) -> Scalar:
-        return self._binary(other, lambda a, b: _ca.floor(to_sx(a) / to_sx(b)))
+        return self._binary(other, lambda a, b: ca.floor(to_sx(a) / to_sx(b)))
 
     def __rfloordiv__(self, other: ScalarData) -> Scalar:
-        return self._rbinary(other, lambda a, b: _ca.floor(to_sx(a) / to_sx(b)))
+        return self._rbinary(other, lambda a, b: ca.floor(to_sx(a) / to_sx(b)))
 
     def __mod__(self, other: ScalarData) -> Scalar:
-        return self._binary(other, _ca.fmod)
+        return self._binary(other, ca.fmod)
 
     def __rmod__(self, other: ScalarData) -> Scalar:
-        return self._rbinary(other, _ca.fmod)
+        return self._rbinary(other, ca.fmod)
 
 
 class _DenseLayout:
@@ -137,11 +145,11 @@ class _DenseLayout:
     def __init__(self, compiled: CompiledFunction) -> None:
         self.compiled = compiled
 
-    def compile(self, casadi_parameters: _te.List[_ca.SX]) -> None:
-        self.compiled.expression.casadi_sx = _ca.densify(
+    def compile(self, casadi_parameters: List[ca.SX]) -> None:
+        self.compiled.expression.casadi_sx = ca.densify(
             self.compiled.expression.casadi_sx
         )
-        self.compiled._compiled_casadi_function = _ca.Function(
+        self.compiled._compiled_casadi_function = ca.Function(
             "f", casadi_parameters, [self.compiled.expression.casadi_sx]
         )
         self.compiled._function_buffer, self.compiled._function_evaluator = (
@@ -154,7 +162,7 @@ class _DenseLayout:
             shape = expr.shape[0]
         else:
             shape = expr.shape
-        self.compiled._out = _np.zeros(shape, order="F")
+        self.compiled._out = np.zeros(shape, order="F")
         self.compiled._function_buffer.set_res(0, memoryview(self.compiled._out))
 
 
@@ -164,11 +172,11 @@ class _SparseLayout:
     def __init__(self, compiled: "CompiledFunction") -> None:
         self.compiled = compiled
 
-    def compile(self, casadi_parameters: _te.List[_ca.SX]) -> None:
-        self.compiled.expression.casadi_sx = _ca.sparsify(
+    def compile(self, casadi_parameters: List[ca.SX]) -> None:
+        self.compiled.expression.casadi_sx = ca.sparsify(
             self.compiled.expression.casadi_sx
         )
-        self.compiled._compiled_casadi_function = _ca.Function(
+        self.compiled._compiled_casadi_function = ca.Function(
             "f", casadi_parameters, [self.compiled.expression.casadi_sx]
         )
         self.compiled._function_buffer, self.compiled._function_evaluator = (
@@ -177,11 +185,11 @@ class _SparseLayout:
         self.csc_indices, self.csc_indptr = (
             self.compiled.expression.casadi_sx.sparsity().get_ccs()
         )
-        self.zeroes = _np.zeros(self.compiled.expression.casadi_sx.nnz())
+        self.zeroes = np.zeros(self.compiled.expression.casadi_sx.nnz())
 
     def setup_output(self) -> None:
         expr = self.compiled.expression
-        out = _sp.csc_matrix(
+        out = sp.csc_matrix(
             arg1=(
                 self.zeroes,
                 self.csc_indptr,
@@ -193,7 +201,7 @@ class _SparseLayout:
         self.compiled._function_buffer.set_res(0, memoryview(out.data))
 
 
-@_dataclasses.dataclass
+@dataclass
 class CompiledFunction:
     """
     A compiled symbolic function that can be efficiently evaluated with CasADi.
@@ -207,9 +215,7 @@ class CompiledFunction:
     """
     The symbolic expression to compile.
     """
-    variable_parameters: _te.Optional[
-        VariableParameters | _te.List[_te.List[FloatVariable]]
-    ] = None
+    variable_parameters: Optional[VariableParameters | List[List[FloatVariable]]] = None
     """
     The input parameters for the compiled symbolic expression.
     """
@@ -218,15 +224,15 @@ class CompiledFunction:
     Whether to return a sparse matrix or a dense numpy matrix
     """
 
-    _compiled_casadi_function: _ca.Function = _dataclasses.field(init=False)
+    _compiled_casadi_function: ca.Function = field(init=False)
 
-    _function_buffer: _ca.FunctionBuffer = _dataclasses.field(init=False)
-    _function_evaluator: _functools.partial = _dataclasses.field(init=False)
+    _function_buffer: ca.FunctionBuffer = field(init=False)
+    _function_evaluator: partial = field(init=False)
     """
     Helpers to avoid new memory allocation during function evaluation
     """
 
-    _out: _te.Union[_np.ndarray, _sp.csc_matrix] = _dataclasses.field(init=False)
+    _out: np.ndarray | sp.csc_matrix = field(init=False)
     """
     The result of a function evaluation is stored in this variable.
     """
@@ -282,7 +288,7 @@ class CompiledFunction:
 
         # Check for duplicate variables
         if len(variables_set) != len(variables):
-            variable_counts = _Counter(variables)
+            variable_counts = Counter(variables)
             all_duplicates = [
                 variable
                 for variable, count in variable_counts.items()
@@ -296,9 +302,9 @@ class CompiledFunction:
         Setup result for empty expressions.
         """
         if self.sparse:
-            self._out = _sp.csc_matrix(_np.empty(self.expression.shape))
+            self._out = sp.csc_matrix(np.empty(self.expression.shape))
         else:
-            self._out = _np.empty(self.expression.shape)
+            self._out = np.empty(self.expression.shape)
         self._is_constant = True
 
     def _setup_compiled_function(self) -> None:
@@ -334,21 +340,21 @@ class CompiledFunction:
         self._function_evaluator()
         self._is_constant = True
 
-    def bind_args_to_memory_view(self, arg_idx: int, numpy_array: _np.ndarray) -> None:
+    def bind_args_to_memory_view(self, arg_idx: int, numpy_array: np.ndarray) -> None:
         """
         Binds the arg at index arg_idx to the memoryview of a numpy_array.
         If your args keep the same memory across calls, you only need to bind them once.
         """
         self._function_buffer.set_arg(arg_idx, memoryview(numpy_array))
 
-    def evaluate(self) -> _te.Union[_np.ndarray, _sp.csc_matrix]:
+    def evaluate(self) -> np.ndarray | sp.csc_matrix:
         """
         Evaluate the compiled function with the current args.
         """
         self._function_evaluator()
         return self._out
 
-    def __call__(self, *args: _np.ndarray) -> _te.Union[_np.ndarray, _sp.csc_matrix]:
+    def __call__(self, *args: np.ndarray) -> np.ndarray | sp.csc_matrix:
         """
         Efficiently evaluate the compiled function with positional arguments by directly writing the memory of the
         numpy arrays to the memoryview of the compiled function.
@@ -371,7 +377,7 @@ class CompiledFunction:
             self.bind_args_to_memory_view(arg_idx, arg)
         return self.evaluate()
 
-    def call_with_kwargs(self, **kwargs: float) -> _np.ndarray:
+    def call_with_kwargs(self, **kwargs: float) -> np.ndarray:
         """
         Call the object instance with the provided keyword arguments. This method retrieves
         the required arguments from the keyword arguments based on the defined
@@ -387,11 +393,11 @@ class CompiledFunction:
         for group in self.variable_parameters.groups:
             for param in group.variables:
                 args.append(kwargs[str(param)])
-        filtered_args = _np.array(args, dtype=float)
+        filtered_args = np.array(args, dtype=float)
         return self(filtered_args)
 
 
-@_dataclasses.dataclass
+@dataclass
 class CompiledFunctionWithViews:
     """
     A wrapper for CompiledFunction which automatically splits the result array into multiple views, with minimal
@@ -402,27 +408,27 @@ class CompiledFunctionWithViews:
         returns [expr1_result, expr2_result, np.concatenate([expr1_result, expr2_result])[start:end]]
     """
 
-    expressions: _te.List[Expression]
+    expressions: List[Expression]
     """
     The list of expressions to be compiled.
     """
 
-    variable_parameters: _te.List[_te.List[FloatVariable]]
+    variable_parameters: List[List[FloatVariable]]
     """
     The input parameters for the compiled symbolic expression.
     """
 
-    additional_views: _te.Optional[_te.List[slice]] = field(default_factory=list)
+    additional_views: Optional[List[slice]] = field(default_factory=list)
     """
     If additional views are required that don't correspond to the expressions directly.
     """
 
-    compiled_function: CompiledFunction = _dataclasses.field(init=False)
+    compiled_function: CompiledFunction = field(init=False)
     """
     Reference to the compiled function.
     """
 
-    split_out_view: _te.List[_np.ndarray] = _dataclasses.field(init=False)
+    split_out_view: List[np.ndarray] = field(init=False)
     """
     Views to the out buffer of the compiled function.
     """
@@ -438,13 +444,13 @@ class CompiledFunctionWithViews:
             end = start + expression.shape[0]
             slices.append(end)
             start = end
-        self.split_out_view = _np.split(self.compiled_function._out, slices)
+        self.split_out_view = np.split(self.compiled_function._out, slices)
         for expression_slice in self.additional_views:
             self.split_out_view.append(self.compiled_function._out[expression_slice])
 
-    def __call__(self, *args: _np.ndarray) -> _te.List[_np.ndarray]:
+    def __call__(self, *args: np.ndarray) -> List[np.ndarray]:
         """
-        :param args: A numpy array for each _te.List[FloatVariable] in self.variable_parameters.
+        :param args: A numpy array for each List[FloatVariable] in self.variable_parameters.
         :return: A np array for each expression, followed by arrays corresponding to the additional views.
             They are all views on self.compiled_function.out.
         """
@@ -452,41 +458,39 @@ class CompiledFunctionWithViews:
         return self.split_out_view
 
 
-@_dataclasses.dataclass(eq=False)
+@dataclass(eq=False)
 class SymbolicMathType(Symbol):
     """
-    A wrapper around CasADi's _ca.SX, with better usability
+    A wrapper around CasADi's ca.SX, with better usability
     """
 
-    _casadi_sx: _ca.SX = _dataclasses.field(
-        kw_only=True, default_factory=_ca.SX, repr=False
-    )
+    _casadi_sx: ca.SX = field(kw_only=True, default_factory=ca.SX, repr=False)
     """
     Reference to the casadi data structure of type casadi.SX
     """
 
     @classmethod
-    def from_casadi_sx(cls, casadi_sx: _ca.SX) -> _te.Self:
+    def from_casadi_sx(cls, casadi_sx: ca.SX) -> Self:
         result = cls()
         result.casadi_sx = casadi_sx
         return result
 
     @property
-    def casadi_sx(self) -> _ca.SX:
+    def casadi_sx(self) -> ca.SX:
         return self._casadi_sx
 
     @casadi_sx.setter
-    def casadi_sx(self, casadi_sx: _ca.SX) -> None:
+    def casadi_sx(self, casadi_sx: ca.SX) -> None:
         self._casadi_sx = casadi_sx
 
     def __str__(self):
         return str(self.casadi_sx)
 
-    def pretty_str(self) -> _te.List[_te.List[str]]:
+    def pretty_str(self) -> List[List[str]]:
         """
         Turns a symbolic type into a more or less readable string.
         """
-        result_list = _np.zeros(self.shape).tolist()
+        result_list = np.zeros(self.shape).tolist()
         for x_index in range(self.shape[0]):
             for y_index in range(self.shape[1]):
                 s = str(self[x_index, y_index])
@@ -513,18 +517,13 @@ class SymbolicMathType(Symbol):
         return self.casadi_sx.__hash__()
 
     def __getitem__(
-        self,
-        item: _te.Union[
-            _np.ndarray,
-            _te.Union[int, slice],
-            _te.Tuple[_te.Union[int, slice], _te.Union[int, slice]],
-        ],
+        self, item: np.ndarray | int | slice | Tuple[int | slice, int | slice]
     ) -> Scalar | Vector:
         """
         Gives this class the getitem behavior of numpy.
         """
-        if isinstance(item, _np.ndarray) and item.dtype == bool:
-            item = (_np.where(item)[0], slice(None, None))
+        if isinstance(item, np.ndarray) and item.dtype == bool:
+            item = (np.where(item)[0], slice(None, None))
         item_sx = self.casadi_sx[item]
         if item_sx.shape == (1, 1):
             return Scalar.from_casadi_sx(item_sx)
@@ -534,10 +533,7 @@ class SymbolicMathType(Symbol):
 
     def __setitem__(
         self,
-        key: _te.Union[
-            _te.Union[int, slice],
-            _te.Tuple[_te.Union[int, slice], _te.Union[int, slice]],
-        ],
+        key: int | slice | Tuple[int | slice, int | slice],
         value: ScalarData,
     ):
         """
@@ -546,19 +542,19 @@ class SymbolicMathType(Symbol):
         self.casadi_sx[key] = value.casadi_sx if hasattr(value, "casadi_sx") else value
 
     @property
-    def shape(self) -> _te.Tuple[int, int]:
+    def shape(self) -> Tuple[int, int]:
         return self.casadi_sx.shape
 
     def __len__(self) -> int:
         return self.shape[0]
 
-    def free_variables(self) -> _te.List[FloatVariable]:
-        return [FloatVariable._registry[s] for s in _ca.symvar(self.casadi_sx)]
+    def free_variables(self) -> List[FloatVariable]:
+        return [FloatVariable._registry[s] for s in ca.symvar(self.casadi_sx)]
 
     def is_constant(self) -> bool:
         return len(self.free_variables()) == 0
 
-    def to_np(self) -> _np.ndarray:
+    def to_np(self) -> np.ndarray:
         """
         Transforms the data into a numpy array.
         Only works if the expression has no free variables.
@@ -566,16 +562,16 @@ class SymbolicMathType(Symbol):
         if not self.is_constant():
             raise HasFreeVariablesError(self.free_variables())
         if self.shape[0] == self.shape[1] == 0:
-            return _np.eye(0)
+            return np.eye(0)
         elif self.casadi_sx.shape[0] == 1 or self.casadi_sx.shape[1] == 1:
-            return _np.array(_ca.evalf(self.casadi_sx)).ravel()
+            return np.array(ca.evalf(self.casadi_sx)).ravel()
         else:
-            return _np.array(_ca.evalf(self.casadi_sx))
+            return np.array(ca.evalf(self.casadi_sx))
 
     def safe_division(
         self,
         other: GenericSymbolicType,
-        if_nan: _te.Optional[ScalarData] = None,
+        if_nan: Optional[ScalarData] = None,
     ) -> GenericSymbolicType:
         """
         A version of division where no sub-expression is ever NaN. The expression would evaluate to 'if_nan', but
@@ -592,9 +588,7 @@ class SymbolicMathType(Symbol):
 
     def compile(
         self,
-        parameters: _te.Optional[
-            _te.Union[VariableParameters, _te.List[_te.List[FloatVariable]]]
-        ] = None,
+        parameters: Optional[VariableParameters | List[List[FloatVariable]]] = None,
         sparse: bool = False,
     ) -> CompiledFunction:
         """
@@ -610,21 +604,21 @@ class SymbolicMathType(Symbol):
         """
         return CompiledFunction(self, parameters, sparse)
 
-    def evaluate(self) -> _np.ndarray:
+    def evaluate(self) -> np.ndarray:
         """
         Substitutes the free variables in this expression using their `resolve` method and compute the result.
         :return: The evaluated value of this expression.
         """
         f = self.compile([self.free_variables()], sparse=False)
         return f(
-            _np.array([s.resolve() for s in self.free_variables()], dtype=_np.float64)
+            np.array([s.resolve() for s in self.free_variables()], dtype=np.float64)
         )
 
     def substitute(
         self,
-        old_variables: _te.List[FloatVariable],
-        new_variables: _te.List[ScalarData],
-    ) -> _te.Self:
+        old_variables: List[FloatVariable],
+        new_variables: List[ScalarData],
+    ) -> Self:
         """
         Replace variables in an expression with new variables or expressions.
 
@@ -639,8 +633,8 @@ class SymbolicMathType(Symbol):
         """
         old_variables = to_sx([to_sx(s) for s in old_variables])
         new_variables = to_sx([to_sx(s) for s in new_variables])
-        result = _copy.copy(self)
-        result.casadi_sx = _ca.substitute(self.casadi_sx, old_variables, new_variables)
+        result = copy.copy(self)
+        result.casadi_sx = ca.substitute(self.casadi_sx, old_variables, new_variables)
         return result
 
     def equivalent(self, other: ScalarData) -> bool:
@@ -652,27 +646,27 @@ class SymbolicMathType(Symbol):
         :return: True if the two expressions are equivalent, otherwise False
         """
         other_expression = to_sx(other)
-        return _ca.is_equal(
-            _ca.simplify(self.casadi_sx), _ca.simplify(other_expression), 5
+        return ca.is_equal(
+            ca.simplify(self.casadi_sx), ca.simplify(other_expression), 5
         )
 
 
-@_dataclasses.dataclass(eq=False)
+@dataclass(eq=False)
 class FloatVariable(SymbolicMathType, _BaseArithmeticMixin):
     """
     A symbolic expression representing a single float variable.
     No matrix and no numbers.
     """
 
-    _wrap: _ClassVar[_te.Callable[[_ca.SX], Scalar]] = staticmethod(
+    _wrap: ClassVar[Callable[[ca.SX], Scalar]] = staticmethod(
         lambda sx: Scalar.from_casadi_sx(sx)
     )
 
-    name: str = _dataclasses.field(kw_only=True)
+    name: str = field(kw_only=True)
 
-    casadi_sx: _ca.SX = _dataclasses.field(kw_only=True, init=False, default=None)
+    casadi_sx: ca.SX = field(kw_only=True, init=False, default=None)
 
-    _registry: _ClassVar[_te.Dict[_ca.SX, FloatVariable]] = {}
+    _registry: ClassVar[Dict[ca.SX, FloatVariable]] = {}
     """
     Keeps track of which FloatVariable instances are associated with which which casadi.SX instances.
     Needed to recreate the FloatVariables from a casadi expression.
@@ -680,7 +674,7 @@ class FloatVariable(SymbolicMathType, _BaseArithmeticMixin):
     """
 
     def __post_init__(self):
-        self.casadi_sx = _ca.SX.sym(str(self.name))
+        self.casadi_sx = ca.SX.sym(str(self.name))
         self._registry[self.casadi_sx] = self
 
     def __str__(self):
@@ -698,7 +692,7 @@ class FloatVariable(SymbolicMathType, _BaseArithmeticMixin):
         Subclasses should override this method to return the current float value for this variable.
         :return: This variables' current value.
         """
-        return _np.nan
+        return np.nan
 
     def __bool__(self) -> bool:
         """
@@ -721,17 +715,17 @@ class FloatVariable(SymbolicMathType, _BaseArithmeticMixin):
         return False
 
     def __invert__(self) -> Scalar:
-        return Scalar.from_casadi_sx(_ca.logic_not(self.casadi_sx))
+        return Scalar.from_casadi_sx(ca.logic_not(self.casadi_sx))
 
     def __and__(self, other: Scalar | FloatVariable) -> Scalar:
         if other.is_const_false():
             return other
-        return Scalar.from_casadi_sx(_ca.logic_or(self.casadi_sx, other.casadi_sx))
+        return Scalar.from_casadi_sx(ca.logic_or(self.casadi_sx, other.casadi_sx))
 
     def __or__(self, other: Scalar | FloatVariable) -> Scalar:
         if other.is_const_true():
             return other
-        return Scalar.from_casadi_sx(_ca.logic_or(self.casadi_sx, other.casadi_sx))
+        return Scalar.from_casadi_sx(ca.logic_or(self.casadi_sx, other.casadi_sx))
 
     # %% Comparison operations
     def __eq__(self, other: Scalar | FloatVariable) -> Scalar:
@@ -750,7 +744,7 @@ class FloatVariable(SymbolicMathType, _BaseArithmeticMixin):
         return Scalar.from_casadi_sx(self.casadi_sx.__gt__(other.casadi_sx))
 
 
-@_dataclasses.dataclass(eq=False)
+@dataclass(eq=False)
 class Expression(SymbolicMathType):
     """
     Represents symbolic expressions with rich mathematical capabilities, including matrix
@@ -764,64 +758,41 @@ class Expression(SymbolicMathType):
     leverages symbolic computation libraries for handling low-level symbolic details efficiently.
     """
 
-    casadi_sx: _ca.SX = _dataclasses.field(
-        kw_only=True, default_factory=lambda: _ca.SX()
-    )
+    casadi_sx: ca.SX = field(kw_only=True, default_factory=lambda: ca.SX())
 
-    data: _dataclasses.InitVar[
-        _te.Optional[
-            _te.Union[
-                NumericalScalar,
-                NumericalVector,
-                NumericalMatrix,
-                SymbolicMathType,
-                _te.Iterable[FloatVariable],
-                _te.Iterable[SymbolicMathType],
-                _te.Iterable[_te.Iterable[SymbolicMathType]],
-            ]
-        ]
-    ] = None
+    data: InitVar[Optional[ScalarData | VectorData | MatrixData]] = None
 
     def __post_init__(
         self,
-        data: _te.Optional[
-            _te.Union[
-                _ca.SX,
-                NumericalScalar,
-                NumericalVector,
-                NumericalMatrix,
-                _te.Iterable[FloatVariable],
-            ]
+        data: Optional[
+            ca.SX
+            | NumericalScalar
+            | NumericalVector
+            | NumericalMatrix
+            | Iterable[FloatVariable]
         ],
     ):
         if data is None:
-            return
-        if isinstance(data, _ca.SX):
-            self.casadi_sx = data
-        elif isinstance(data, SymbolicMathType):
-            self.casadi_sx = data.casadi_sx
-        elif isinstance(data, _te.Iterable):
-            self._from_iterable(data)
-        else:
-            self.casadi_sx = _ca.SX(data)
+            data = []
+        self.casadi_sx = to_sx(data)
 
     def _from_iterable(
         self,
-        data: _te.Union[NumericalVector, NumericalMatrix, _te.Iterable[FloatVariable]],
+        data: NumericalVector | NumericalMatrix | Iterable[FloatVariable],
     ):
         x = len(data)
         if x == 0:
-            self.casadi_sx = _ca.SX()
+            self.casadi_sx = ca.SX()
             return
         if (
             isinstance(data[0], list)
             or isinstance(data[0], tuple)
-            or isinstance(data[0], _np.ndarray)
+            or isinstance(data[0], np.ndarray)
         ):
             y = len(data[0])
         else:
             y = 1
-        casadi_sx = _ca.SX(x, y)
+        casadi_sx = ca.SX(x, y)
         for i in range(casadi_sx.shape[0]):
             if y > 1:
                 for j in range(casadi_sx.shape[1]):
@@ -831,15 +802,15 @@ class Expression(SymbolicMathType):
         self.casadi_sx = casadi_sx
 
     def __copy__(self) -> Expression:
-        return self.from_casadi_sx(_copy.copy(self.casadi_sx))
+        return self.from_casadi_sx(copy.copy(self.casadi_sx))
 
-    def __neg__(self) -> _te.Self:
+    def __neg__(self) -> Self:
         return self.from_casadi_sx(self.casadi_sx.__neg__())
 
-    def __abs__(self) -> _te.Self:
-        return self.from_casadi_sx(_ca.fabs(self.casadi_sx))
+    def __abs__(self) -> Self:
+        return self.from_casadi_sx(ca.fabs(self.casadi_sx))
 
-    def jacobian(self, variables: _te.Iterable[FloatVariable]) -> Matrix:
+    def jacobian(self, variables: Iterable[FloatVariable]) -> Matrix:
         """
         Compute the Jacobian matrix of a vector of expressions with respect to a vector of variables.
 
@@ -849,12 +820,12 @@ class Expression(SymbolicMathType):
         :param variables: The variables with respect to which the partial derivatives are taken.
         :return: The Jacobian matrix as an Expression.
         """
-        return Matrix.from_casadi_sx(_ca.jacobian(self.casadi_sx, to_sx(variables)))
+        return Matrix.from_casadi_sx(ca.jacobian(self.casadi_sx, to_sx(variables)))
 
     def jacobian_dot(
         self,
-        variables: _te.Iterable[FloatVariable],
-        variables_dot: _te.Iterable[FloatVariable],
+        variables: Iterable[FloatVariable],
+        variables_dot: Iterable[FloatVariable],
     ) -> Matrix:
         """
         Compute the total derivative of the Jacobian matrix.
@@ -865,9 +836,9 @@ class Expression(SymbolicMathType):
         computes the total derivative based on the provided variables and
         their time derivatives.
 
-        :param variables: _te.Iterable containing the variables with respect to which
+        :param variables: Iterable containing the variables with respect to which
             the Jacobian is calculated.
-        :param variables_dot: _te.Iterable containing the time derivatives of the
+        :param variables_dot: Iterable containing the time derivatives of the
             corresponding variables in `variables`.
         :return: The time derivative of the Jacobian matrix.
         """
@@ -879,9 +850,9 @@ class Expression(SymbolicMathType):
 
     def jacobian_ddot(
         self,
-        variables: _te.Iterable[FloatVariable],
-        variables_dot: _te.Iterable[FloatVariable],
-        variables_ddot: _te.Iterable[FloatVariable],
+        variables: Iterable[FloatVariable],
+        variables_dot: Iterable[FloatVariable],
+        variables_ddot: Iterable[FloatVariable],
     ) -> Matrix:
         """
         Compute the second-order total derivative of the Jacobian matrix.
@@ -912,8 +883,8 @@ class Expression(SymbolicMathType):
 
     def total_derivative(
         self,
-        variables: _te.Iterable[FloatVariable],
-        variables_dot: _te.Iterable[FloatVariable],
+        variables: Iterable[FloatVariable],
+        variables_dot: Iterable[FloatVariable],
     ) -> Vector:
         """
         Compute the total derivative of an expression with respect to given variables and their derivatives
@@ -922,19 +893,19 @@ class Expression(SymbolicMathType):
         The total derivative accounts for a dependent relationship where the specified variables represent
         the variables of interest, and the dot variables represent the time derivatives of those variables.
 
-        :param variables: _te.Iterable of variables with respect to which the derivative is computed.
-        :param variables_dot: _te.Iterable of dot variables representing the derivatives of the variables.
+        :param variables: Iterable of variables with respect to which the derivative is computed.
+        :param variables_dot: Iterable of dot variables representing the derivatives of the variables.
         :return: The expression resulting from the total derivative computation.
         """
         return Vector.from_casadi_sx(
-            _ca.jtimes(self.casadi_sx, to_sx(variables), to_sx(variables_dot))
+            ca.jtimes(self.casadi_sx, to_sx(variables), to_sx(variables_dot))
         )
 
     def second_order_total_derivative(
         self,
-        variables: _te.Iterable[FloatVariable],
-        variables_dot: _te.Iterable[FloatVariable],
-        variables_ddot: _te.Iterable[FloatVariable],
+        variables: Iterable[FloatVariable],
+        variables_dot: Iterable[FloatVariable],
+        variables_ddot: Iterable[FloatVariable],
     ) -> Vector:
         """
         Computes the second-order total derivative of an expression with respect to a set of variables.
@@ -945,9 +916,9 @@ class Expression(SymbolicMathType):
         expression and multiplies it by a vector that combines the provided derivative
         data.
 
-        :param variables: _te.Iterable containing the variables with respect to which the derivative is calculated.
-        :param variables_dot: _te.Iterable containing the first-order derivatives of the variables.
-        :param variables_ddot: _te.Iterable containing the second-order derivatives of the variables.
+        :param variables: Iterable containing the variables with respect to which the derivative is calculated.
+        :param variables_dot: Iterable containing the first-order derivatives of the variables.
+        :param variables_ddot: Iterable containing the second-order derivatives of the variables.
         :return: The computed second-order total derivative, returned as an `Expression`.
         """
         variables = to_sx(variables)
@@ -961,14 +932,14 @@ class Expression(SymbolicMathType):
                 else:
                     v.append(variables_dot[i] * variables_dot[j])
         v = Vector(v)
-        H = Matrix(_ca.hessian(to_sx(self), variables)[0])
+        H = Matrix(ca.hessian(to_sx(self), variables)[0])
         H = H.reshape((1, len(H) ** 2))
         return H.dot(v)
 
 
-@_dataclasses.dataclass(eq=False, init=False)
+@dataclass(eq=False, init=False)
 class Scalar(Expression, _BaseArithmeticMixin):
-    _wrap: _ClassVar[_te.Callable[[_ca.SX], Scalar]] = staticmethod(
+    _wrap: ClassVar[Callable[[ca.SX], Scalar]] = staticmethod(
         lambda sx: Scalar.from_casadi_sx(sx)
     )
 
@@ -977,11 +948,11 @@ class Scalar(Expression, _BaseArithmeticMixin):
         self.verify_scalar()
 
     @property
-    def casadi_sx(self) -> _ca.SX:
+    def casadi_sx(self) -> ca.SX:
         return self._casadi_sx
 
     @casadi_sx.setter
-    def casadi_sx(self, casadi_sx: _ca.SX) -> None:
+    def casadi_sx(self, casadi_sx: ca.SX) -> None:
         self._casadi_sx = casadi_sx
         self.verify_scalar()
 
@@ -991,15 +962,15 @@ class Scalar(Expression, _BaseArithmeticMixin):
 
     # %% Boolean operations
     @classmethod
-    def const_false(cls) -> _te.Self:
+    def const_false(cls) -> Self:
         return cls(False)
 
     @classmethod
-    def const_trinary_unknown(cls) -> _te.Self:
+    def const_trinary_unknown(cls) -> Self:
         return cls(0.5)
 
     @classmethod
-    def const_true(cls) -> _te.Self:
+    def const_true(cls) -> Self:
         return cls(True)
 
     def is_const_true(self):
@@ -1021,30 +992,30 @@ class Scalar(Expression, _BaseArithmeticMixin):
         """
         if self.is_constant():
             return bool(self.to_np())
-        elif self.casadi_sx.op() == _ca.OP_EQ:
+        elif self.casadi_sx.op() == ca.OP_EQ:
             # not evaluating bool would cause all expressions containing == to be evaluated to True, because they are not None
             # this can cause a lot of unintended bugs, therefore we try to evaluate it
             left = self.casadi_sx.dep(0)
             right = self.casadi_sx.dep(1)
-            return _ca.is_equal(_ca.simplify(left), _ca.simplify(right), 5)
+            return ca.is_equal(ca.simplify(left), ca.simplify(right), 5)
         raise HasFreeVariablesError(self.free_variables())
 
     def __invert__(self) -> Scalar:
-        return Scalar.from_casadi_sx(_ca.logic_not(self.casadi_sx))
+        return Scalar.from_casadi_sx(ca.logic_not(self.casadi_sx))
 
     def __and__(self, other: Scalar | FloatVariable) -> Scalar:
         if self.is_const_false():
             return self
         if other.is_const_false():
             return other
-        return Scalar.from_casadi_sx(_ca.logic_or(self.casadi_sx, other.casadi_sx))
+        return Scalar.from_casadi_sx(ca.logic_or(self.casadi_sx, other.casadi_sx))
 
     def __or__(self, other: Scalar | FloatVariable) -> Scalar:
         if self.is_const_true():
             return self
         if other.is_const_true():
             return other
-        return Scalar.from_casadi_sx(_ca.logic_or(self.casadi_sx, other.casadi_sx))
+        return Scalar.from_casadi_sx(ca.logic_or(self.casadi_sx, other.casadi_sx))
 
     # %% Comparison operations
     def _compare(
@@ -1095,7 +1066,7 @@ class Scalar(Expression, _BaseArithmeticMixin):
             raise HasFreeVariablesError(self.free_variables())
         return float(self.to_np())
 
-    def hessian(self, variables: _te.Iterable[FloatVariable]) -> Matrix:
+    def hessian(self, variables: Iterable[FloatVariable]) -> Matrix:
         """
         Calculate the Hessian matrix of a given expression with respect to specified variables.
 
@@ -1108,15 +1079,15 @@ class Scalar(Expression, _BaseArithmeticMixin):
         :return: The resulting Hessian matrix as an expression.
         """
         expressions = self.casadi_sx
-        return Matrix(_ca.hessian(expressions, to_sx(variables))[0])
+        return Matrix(ca.hessian(expressions, to_sx(variables))[0])
 
 
-@_dataclasses.dataclass(eq=False)
+@dataclass(eq=False)
 class Vector(Expression):
 
     def __init__(
         self,
-        data: _te.Optional[VectorData] = None,
+        data: Optional[VectorData] = None,
     ):
         if data is None:
             data = []
@@ -1132,32 +1103,32 @@ class Vector(Expression):
         for i in range(self.shape[0]):
             yield self[i]
 
-    def __add__(self, other: ScalarData | VectorData) -> _te.Self:
+    def __add__(self, other: ScalarData | VectorData) -> Self:
         return Vector.from_casadi_sx(to_sx(self) + to_sx(other))
 
-    def __sub__(self, other: ScalarData | VectorData) -> _te.Self:
+    def __sub__(self, other: ScalarData | VectorData) -> Self:
         return Vector.from_casadi_sx(to_sx(self) - to_sx(other))
 
-    def __mul__(self, other: ScalarData | VectorData) -> _te.Self:
+    def __mul__(self, other: ScalarData | VectorData) -> Self:
         return Vector.from_casadi_sx(to_sx(self) * to_sx(other))
 
-    def __truediv__(self, other: ScalarData | VectorData) -> _te.Self:
+    def __truediv__(self, other: ScalarData | VectorData) -> Self:
         return Vector.from_casadi_sx(to_sx(self) / to_sx(other))
 
-    def __pow__(self, other: ScalarData | VectorData) -> _te.Self:
+    def __pow__(self, other: ScalarData | VectorData) -> Self:
         return Vector.from_casadi_sx(to_sx(self) ** to_sx(other))
 
-    def __floordiv__(self, other: ScalarData | VectorData) -> _te.Self:
-        return Vector.from_casadi_sx(_ca.floor(to_sx(self) / to_sx(other)))
+    def __floordiv__(self, other: ScalarData | VectorData) -> Self:
+        return Vector.from_casadi_sx(ca.floor(to_sx(self) / to_sx(other)))
 
-    def __mod__(self, other: ScalarData | VectorData) -> _te.Self:
+    def __mod__(self, other: ScalarData | VectorData) -> Self:
         return fmod(self, other)
 
     def dot(self, other: GenericSymbolicType) -> Scalar | Vector:
         if isinstance(other, Matrix):  # copy numpy logic, where vectors only have 1 dim
-            return Vector.from_casadi_sx(_ca.mtimes(to_sx(self).T, to_sx(other)))
+            return Vector.from_casadi_sx(ca.mtimes(to_sx(self).T, to_sx(other)))
         if isinstance(other, Vector):
-            return Scalar.from_casadi_sx(_ca.mtimes(to_sx(self).T, to_sx(other)))
+            return Scalar.from_casadi_sx(ca.mtimes(to_sx(self).T, to_sx(other)))
         raise UnsupportedOperationError("dot", self, other)
 
     def __matmul__(self, other: GenericSymbolicType) -> GenericSymbolicType:
@@ -1169,36 +1140,36 @@ class Vector(Expression):
             return self.to_np() == other.to_np()
         return Vector.from_casadi_sx(to_sx(self).__eq__(to_sx(other)))
 
-    def __le__(self, other: Vector) -> _te.Self:
+    def __le__(self, other: Vector) -> Self:
         return self.from_casadi_sx(to_sx(self).__le__(to_sx(other)))
 
-    def __lt__(self, other: Vector) -> _te.Self:
+    def __lt__(self, other: Vector) -> Self:
         return self.from_casadi_sx(to_sx(self).__lt__(to_sx(other)))
 
-    def __ge__(self, other: Vector) -> _te.Self:
+    def __ge__(self, other: Vector) -> Self:
         return self.from_casadi_sx(to_sx(self).__ge__(to_sx(other)))
 
-    def __gt__(self, other: Vector) -> _te.Self:
+    def __gt__(self, other: Vector) -> Self:
         return self.from_casadi_sx(to_sx(self).__gt__(to_sx(other)))
 
-    def euclidean_distance(self, other: _te.Self) -> Scalar:
+    def euclidean_distance(self, other: Self) -> Scalar:
         difference = self - other
         distance = difference.norm()
         return distance
 
     def norm(self) -> Scalar:
-        return Scalar.from_casadi_sx(_ca.norm_2(to_sx(self)))
+        return Scalar.from_casadi_sx(ca.norm_2(to_sx(self)))
 
     def scale(self, a: ScalarData) -> Vector:
         return self.safe_division(self.norm()) * a
 
 
-@_dataclasses.dataclass(eq=False)
+@dataclass(eq=False)
 class Matrix(Expression):
 
     def __init__(
         self,
-        data: _te.Optional[VectorData | MatrixData] = None,
+        data: Optional[VectorData | MatrixData] = None,
     ):
         if data is None:
             data = []
@@ -1214,66 +1185,66 @@ class Matrix(Expression):
         for i in range(self.shape[0]):
             yield Vector.from_casadi_sx(self.casadi_sx[i, :])
 
-    def __add__(self, other: Scalar | Vector | Matrix) -> _te.Self:
+    def __add__(self, other: Scalar | Vector | Matrix) -> Self:
         other_sx = self._broadcast_like_self(other)
         return Matrix.from_casadi_sx(self.casadi_sx + other_sx)
 
-    def __sub__(self, other: Scalar | Vector | Matrix) -> _te.Self:
+    def __sub__(self, other: Scalar | Vector | Matrix) -> Self:
         other_sx = self._broadcast_like_self(other)
         return Matrix.from_casadi_sx(self.casadi_sx - other_sx)
 
-    def __mul__(self, other: Scalar | Vector | Matrix) -> _te.Self:
+    def __mul__(self, other: Scalar | Vector | Matrix) -> Self:
         other_sx = self._broadcast_like_self(other)
         return Matrix.from_casadi_sx(self.casadi_sx * other_sx)
 
-    def __truediv__(self, other: Scalar | Vector | Matrix) -> _te.Self:
+    def __truediv__(self, other: Scalar | Vector | Matrix) -> Self:
         other_sx = self._broadcast_like_self(other)
         num = self.casadi_sx
         den = other_sx
-        zero_den = _ca.eq(den, 0)
-        zero_num = _ca.eq(num, 0)
-        signed_inf = _ca.sign(num) * _ca.SX(_np.inf)
-        nan_const = _ca.SX(_np.nan)
+        zero_den = ca.eq(den, 0)
+        zero_num = ca.eq(num, 0)
+        signed_inf = ca.sign(num) * ca.SX(np.inf)
+        nan_const = ca.SX(np.nan)
         base_div = num / den
         # Where denominator is zero, use signed infinity; where both numerator and denominator are zero, use NaN
-        result = _ca.if_else(
-            zero_den, _ca.if_else(zero_num, nan_const, signed_inf), base_div
+        result = ca.if_else(
+            zero_den, ca.if_else(zero_num, nan_const, signed_inf), base_div
         )
         return Matrix.from_casadi_sx(result)
 
-    def __pow__(self, other: Scalar | Vector | Matrix) -> _te.Self:
+    def __pow__(self, other: Scalar | Vector | Matrix) -> Self:
         other_sx = self._broadcast_like_self(other)
         return Matrix.from_casadi_sx(self.casadi_sx**other_sx)
 
-    def __floordiv__(self, other: Scalar | Vector | Matrix) -> _te.Self:
+    def __floordiv__(self, other: Scalar | Vector | Matrix) -> Self:
         other_sx = self._broadcast_like_self(other)
         num = self.casadi_sx
         den = other_sx
-        zero_den = _ca.eq(den, 0)
+        zero_den = ca.eq(den, 0)
         # numpy: floor_divide by zero yields 0 and issues a warning; we mimic the value semantics
-        div = _ca.floor(num / den)
-        result = _ca.if_else(zero_den, _ca.SX.zeros(*self.shape), div)
+        div = ca.floor(num / den)
+        result = ca.if_else(zero_den, ca.SX.zeros(*self.shape), div)
         return Matrix.from_casadi_sx(result)
 
-    def __mod__(self, other: Scalar | Vector | Matrix) -> _te.Self:
+    def __mod__(self, other: Scalar | Vector | Matrix) -> Self:
         other_sx = self._broadcast_like_self(other)
         num = self.casadi_sx
         den = other_sx
-        zero_den = _ca.eq(den, 0)
-        mod_val = _ca.fmod(num, den)
-        result = _ca.if_else(zero_den, _ca.SX.zeros(*self.shape), mod_val)
+        zero_den = ca.eq(den, 0)
+        mod_val = ca.fmod(num, den)
+        result = ca.if_else(zero_den, ca.SX.zeros(*self.shape), mod_val)
         return Matrix.from_casadi_sx(result)
 
     def dot(self, other: GenericSymbolicType) -> GenericSymbolicType:
         return _create_return_type(other).from_casadi_sx(
-            _ca.mtimes(to_sx(self), to_sx(other))
+            ca.mtimes(to_sx(self), to_sx(other))
         )
 
     def __matmul__(self, other: GenericSymbolicType) -> GenericSymbolicType:
         return self.dot(other)
 
     # %% Comparison operations
-    def __eq__(self, other: Matrix) -> _te.Self | bool:
+    def __eq__(self, other: Matrix) -> Self | bool:
         if self.is_constant() and other.is_constant():
             return self.to_np() == other.to_np()
         return Matrix.from_casadi_sx(self.casadi_sx.__eq__(other.casadi_sx))
@@ -1290,7 +1261,7 @@ class Matrix(Expression):
     def __gt__(self, other: Scalar | FloatVariable) -> Scalar:
         return Scalar.from_casadi_sx(self.casadi_sx.__gt__(other.casadi_sx))
 
-    def _broadcast_like_self(self, other: Expression) -> _ca.SX:
+    def _broadcast_like_self(self, other: Expression) -> ca.SX:
         """
         Broadcast the other operand to match this matrix's shape for element-wise operations.
 
@@ -1313,66 +1284,66 @@ class Matrix(Expression):
             and other.shape[0] == 1
             and other.shape[1] == self.shape[1]
         ):
-            return _ca.repmat(other.casadi_sx, self.shape[0], 1)
+            return ca.repmat(other.casadi_sx, self.shape[0], 1)
         # Vector column broadcasting: (n, 1) with matching rows
         if (
             isinstance(other, Vector)
             and other.shape[1] == 1
             and other.shape[0] == self.shape[0]
         ):
-            return _ca.repmat(other.casadi_sx, 1, self.shape[1])
+            return ca.repmat(other.casadi_sx, 1, self.shape[1])
         # If we reach here, shapes are incompatible
         raise WrongDimensionsError(self.shape, other.shape)
 
     @classmethod
-    def zeros(cls, rows: int, columns: int) -> _te.Self:
-        return cls.from_casadi_sx(casadi_sx=_ca.SX.zeros(rows, columns))
+    def zeros(cls, rows: int, columns: int) -> Self:
+        return cls.from_casadi_sx(casadi_sx=ca.SX.zeros(rows, columns))
 
     @classmethod
-    def ones(cls, x: int, y: int) -> _te.Self:
-        return cls.from_casadi_sx(casadi_sx=_ca.SX.ones(x, y))
+    def ones(cls, x: int, y: int) -> Self:
+        return cls.from_casadi_sx(casadi_sx=ca.SX.ones(x, y))
 
     @classmethod
-    def tri(cls, dimension: int) -> _te.Self:
-        return cls(data=_np.tri(dimension))
+    def tri(cls, dimension: int) -> Self:
+        return cls(data=np.tri(dimension))
 
     @classmethod
-    def eye(cls, size: int) -> _te.Self:
-        return cls.from_casadi_sx(casadi_sx=_ca.SX.eye(size))
+    def eye(cls, size: int) -> Self:
+        return cls.from_casadi_sx(casadi_sx=ca.SX.eye(size))
 
     @classmethod
-    def diag(cls, args: VectorData) -> _te.Self:
-        return cls.from_casadi_sx(casadi_sx=_ca.diag(to_sx(args)))
+    def diag(cls, args: VectorData) -> Self:
+        return cls.from_casadi_sx(casadi_sx=ca.diag(to_sx(args)))
 
     @classmethod
     def vstack(
         cls,
         list_of_matrices: VectorData | MatrixData,
-    ) -> _te.Self:
+    ) -> Self:
         if len(list_of_matrices) == 0:
             return cls(data=[])
         return cls.from_casadi_sx(
-            casadi_sx=_ca.vertcat(*[to_sx(x) for x in list_of_matrices])
+            casadi_sx=ca.vertcat(*[to_sx(x) for x in list_of_matrices])
         )
 
     @classmethod
     def hstack(
         cls,
         list_of_matrices: VectorData | MatrixData,
-    ) -> _te.Self:
+    ) -> Self:
         if len(list_of_matrices) == 0:
             return cls(data=[])
         return cls.from_casadi_sx(
-            casadi_sx=_ca.horzcat(*[to_sx(x) for x in list_of_matrices])
+            casadi_sx=ca.horzcat(*[to_sx(x) for x in list_of_matrices])
         )
 
     @classmethod
     def diag_stack(
         cls,
         list_of_matrices: VectorData | MatrixData,
-    ) -> _te.Self:
-        num_rows = int(_math.fsum(e.shape[0] for e in list_of_matrices))
-        num_columns = int(_math.fsum(e.shape[1] for e in list_of_matrices))
+    ) -> Self:
+        num_rows = int(math.fsum(e.shape[0] for e in list_of_matrices))
+        num_columns = int(math.fsum(e.shape[1] for e in list_of_matrices))
         combined_matrix = Matrix.zeros(num_rows, num_columns)
         row_counter = 0
         column_counter = 0
@@ -1385,26 +1356,26 @@ class Matrix(Expression):
             column_counter += matrix.shape[1]
         return combined_matrix
 
-    def remove(self, rows: _te.List[int], columns: _te.List[int]):
+    def remove(self, rows: List[int], columns: List[int]):
         self.casadi_sx.remove(rows, columns)
 
     def sum(self) -> Scalar:
         """
         the equivalent to _np.sum(matrix)
         """
-        return Scalar.from_casadi_sx(_ca.sum1(_ca.sum2(self.casadi_sx)))
+        return Scalar.from_casadi_sx(ca.sum1(ca.sum2(self.casadi_sx)))
 
-    def sum_row(self) -> _te.Self:
+    def sum_row(self) -> Self:
         """
         the equivalent to _np.sum(matrix, axis=0)
         """
-        return Vector.from_casadi_sx(_ca.sum1(self.casadi_sx))
+        return Vector.from_casadi_sx(ca.sum1(self.casadi_sx))
 
-    def sum_column(self) -> _te.Self:
+    def sum_column(self) -> Self:
         """
         the equivalent to _np.sum(matrix, axis=1)
         """
-        return Vector.from_casadi_sx(_ca.sum2(self.casadi_sx))
+        return Vector.from_casadi_sx(ca.sum2(self.casadi_sx))
 
     def trace(self) -> Scalar:
         if not self.is_square():
@@ -1426,16 +1397,16 @@ class Matrix(Expression):
         """
         if not self.is_square():
             raise NotSquareMatrixError(actual_dimensions=self.casadi_sx.shape)
-        return Scalar(_ca.det(self.casadi_sx))
+        return Scalar(ca.det(self.casadi_sx))
 
     def is_square(self):
         return self.casadi_sx.shape[0] == self.casadi_sx.shape[1]
 
     @property
-    def T(self) -> _te.Self:
+    def T(self) -> Self:
         return Matrix(self.casadi_sx.T)
 
-    def reshape(self, new_shape: _te.Tuple[int, int]) -> _te.Self:
+    def reshape(self, new_shape: Tuple[int, int]) -> Self:
         return Matrix.from_casadi_sx(self.casadi_sx.reshape(new_shape))
 
     def inverse(self) -> Matrix:
@@ -1443,9 +1414,9 @@ class Matrix(Expression):
         Computes the matrix inverse. Only works if the expression is square.
         """
         assert self.shape[0] == self.shape[1]
-        return Matrix(_ca.inv(self.casadi_sx))
+        return Matrix(ca.inv(self.casadi_sx))
 
-    def kron(self, other: Matrix) -> _te.Self:
+    def kron(self, other: Matrix) -> Self:
         """
         Compute the Kronecker product of two given matrices.
 
@@ -1462,11 +1433,11 @@ class Matrix(Expression):
         """
         m1 = to_sx(self)
         m2 = to_sx(other)
-        return Matrix(_ca.kron(m1, m2))
+        return Matrix(ca.kron(m1, m2))
 
 
-def _create_return_type(input_type: SymbolicMathType) -> _te.Type[SymbolicMathType]:
-    if isinstance(input_type, (FloatVariable, int, float, bool, _IntEnum)):
+def _create_return_type(input_type: SymbolicMathType) -> Type[SymbolicMathType]:
+    if isinstance(input_type, (FloatVariable, int, float, bool, IntEnum)):
         return Scalar
     else:
         return type(input_type)
@@ -1477,32 +1448,32 @@ def to_sx(
         NumericalScalar
         | NumericalVector
         | NumericalMatrix
-        | _te.Iterable[FloatVariable]
+        | Iterable[FloatVariable]
         | SymbolicMathType
     ),
-) -> _ca.SX:
-    if isinstance(data, _ca.SX):
+) -> ca.SX:
+    if isinstance(data, ca.SX):
         return data
     if isinstance(data, SymbolicMathType):
-        return _copy.copy(data.casadi_sx)
+        return copy.copy(data.casadi_sx)
     if isinstance(data, NumericalScalar):
-        return _ca.SX(data)
+        return ca.SX(data)
     return array_like_to_casadi_sx(data)
 
 
-def array_like_to_casadi_sx(data: VectorData) -> _ca.SX:
+def array_like_to_casadi_sx(data: VectorData) -> ca.SX:
     x = len(data)
     if x == 0:
-        return _ca.SX()
+        return ca.SX()
     if (
         isinstance(data[0], list)
         or isinstance(data[0], tuple)
-        or isinstance(data[0], _np.ndarray)
+        or isinstance(data[0], np.ndarray)
     ):
         y = len(data[0])
     else:
         y = 1
-    casadi_sx = _ca.SX(x, y)
+    casadi_sx = ca.SX(x, y)
     for i in range(casadi_sx.shape[0]):
         if y > 1:
             for j in range(casadi_sx.shape[1]):
@@ -1512,7 +1483,7 @@ def array_like_to_casadi_sx(data: VectorData) -> _ca.SX:
     return casadi_sx
 
 
-def _unary_function_wrapper(casadi_fn: _te.Callable[[_ca.SX], _ca.SX]):
+def _unary_function_wrapper(casadi_fn: Callable[[ca.SX], ca.SX]):
     """Creates a unary math wrapper that preserves the return type."""
 
     def f(x: GenericSymbolicType) -> GenericSymbolicType:
@@ -1526,8 +1497,8 @@ def _unary_function_wrapper(casadi_fn: _te.Callable[[_ca.SX], _ca.SX]):
 
 
 def _binary_function_wrapper(
-    casadi_fn: _te.Callable[[_ca.SX, _ca.SX], _ca.SX],
-) -> _te.Callable[[GenericSymbolicType, GenericSymbolicType], GenericSymbolicType]:
+    casadi_fn: Callable[[ca.SX, ca.SX], ca.SX],
+) -> Callable[[GenericSymbolicType, GenericSymbolicType], GenericSymbolicType]:
     """Creates a unary math wrapper that preserves the return type."""
 
     def f(x: GenericSymbolicType, y: GenericSymbolicType) -> GenericSymbolicType:
@@ -1541,8 +1512,8 @@ def _binary_function_wrapper(
 
 
 def create_float_variables(
-    names: _te.Union[_te.List[str], int],
-) -> _te.List[FloatVariable]:
+    names: List[str] | int,
+) -> List[FloatVariable]:
     """
     Generates a list of symbolic objects based on the input names or an integer value.
 
@@ -1577,19 +1548,19 @@ def diag_stack(args: VectorData | MatrixData) -> Matrix:
 
 
 # %% basic math
-abs = _unary_function_wrapper(_ca.fabs)
+abs = _unary_function_wrapper(ca.fabs)
 
 
-def max(arg1: Expression, arg2: _te.Optional[Scalar] = None) -> Scalar:
+def max(arg1: Expression, arg2: Optional[Scalar] = None) -> Scalar:
     if isinstance(arg1, (Vector, Matrix)):
-        return Scalar.from_casadi_sx(_ca.mmax(to_sx(arg1)))
-    return Scalar.from_casadi_sx(_ca.fmax(to_sx(arg1), to_sx(arg2)))
+        return Scalar.from_casadi_sx(ca.mmax(to_sx(arg1)))
+    return Scalar.from_casadi_sx(ca.fmax(to_sx(arg1), to_sx(arg2)))
 
 
-def min(arg1: Expression, arg2: _te.Optional[Scalar] = None) -> Scalar:
+def min(arg1: Expression, arg2: Optional[Scalar] = None) -> Scalar:
     if isinstance(arg1, (Vector, Matrix)):
-        return Scalar.from_casadi_sx(_ca.mmin(to_sx(arg1)))
-    return Scalar.from_casadi_sx(_ca.fmin(to_sx(arg1), to_sx(arg2)))
+        return Scalar.from_casadi_sx(ca.mmin(to_sx(arg1)))
+    return Scalar.from_casadi_sx(ca.fmin(to_sx(arg1), to_sx(arg2)))
 
 
 def limit(
@@ -1605,17 +1576,17 @@ def dot(
 
 
 def sum(*expressions: ScalarData) -> Scalar:
-    return Scalar(_ca.sum(to_sx(expressions)))
+    return Scalar(ca.sum(to_sx(expressions)))
 
 
-floor = _unary_function_wrapper(_ca.floor)
-ceil = _unary_function_wrapper(_ca.ceil)
-sign = _unary_function_wrapper(_ca.sign)
-exp = _unary_function_wrapper(_ca.exp)
-log = _unary_function_wrapper(_ca.log)
-sqrt = _unary_function_wrapper(_ca.sqrt)
+floor = _unary_function_wrapper(ca.floor)
+ceil = _unary_function_wrapper(ca.ceil)
+sign = _unary_function_wrapper(ca.sign)
+exp = _unary_function_wrapper(ca.exp)
+log = _unary_function_wrapper(ca.log)
+sqrt = _unary_function_wrapper(ca.sqrt)
 
-fmod = _binary_function_wrapper(_ca.fmod)
+fmod = _binary_function_wrapper(ca.fmod)
 
 
 # %% trigonometry
@@ -1624,7 +1595,7 @@ def normalize_angle_positive(angle: ScalarData) -> Scalar:
     Normalizes the angle to be 0 to 2*pi
     It takes and returns radians.
     """
-    return fmod(fmod(angle, 2.0 * _ca.pi) + 2.0 * _ca.pi, 2.0 * _ca.pi)
+    return fmod(fmod(angle, 2.0 * ca.pi) + 2.0 * ca.pi, 2.0 * ca.pi)
 
 
 def normalize_angle(angle: ScalarData) -> Scalar:
@@ -1633,7 +1604,7 @@ def normalize_angle(angle: ScalarData) -> Scalar:
     It takes and returns radians.
     """
     a = normalize_angle_positive(angle)
-    return if_greater(a, _ca.pi, a - 2.0 * _ca.pi, a)
+    return if_greater(a, ca.pi, a - 2.0 * ca.pi, a)
 
 
 def shortest_angular_distance(from_angle: ScalarData, to_angle: ScalarData) -> Scalar:
@@ -1655,13 +1626,13 @@ def safe_acos(angle: GenericSymbolicType) -> GenericSymbolicType:
     return acos(angle)
 
 
-cos = _unary_function_wrapper(_ca.cos)
-sin = _unary_function_wrapper(_ca.sin)
-tan = _unary_function_wrapper(_ca.tan)
-cosh = _unary_function_wrapper(_ca.cosh)
-sinh = _unary_function_wrapper(_ca.sinh)
-acos = _unary_function_wrapper(_ca.acos)
-atan2 = _binary_function_wrapper(_ca.atan2)
+cos = _unary_function_wrapper(ca.cos)
+sin = _unary_function_wrapper(ca.sin)
+tan = _unary_function_wrapper(ca.tan)
+cosh = _unary_function_wrapper(ca.cosh)
+sinh = _unary_function_wrapper(ca.sinh)
+acos = _unary_function_wrapper(ca.acos)
+atan2 = _binary_function_wrapper(ca.atan2)
 
 
 # %% other
@@ -1694,16 +1665,16 @@ def solve_for(
     f = expression.compile()
     x = start_value
     for tries in range(max_tries):
-        err = f(_np.array([x]))[0] - target_value
-        if _builtins.abs(err) < eps:
+        err = f(np.array([x]))[0] - target_value
+        if builtins.abs(err) < eps:
             return x
-        slope = f_dx(_np.array([x]))[0]
+        slope = f_dx(np.array([x]))[0]
         if slope == 0:
             if start_value > 0:
                 slope = -0.001
             else:
                 slope = 0.001
-        x -= _builtins.max(_builtins.min(err / slope, max_step), -max_step)
+        x -= builtins.max(builtins.min(err / slope, max_step), -max_step)
     raise ValueError("no solution found")
 
 
@@ -1739,15 +1710,15 @@ def logic_not(expression: ScalarData) -> Scalar:
 
 
 def logic_any(args: VectorData | MatrixData) -> Scalar:
-    return Scalar.from_casadi_sx(_ca.logic_any(args.casadi_sx))
+    return Scalar.from_casadi_sx(ca.logic_any(args.casadi_sx))
 
 
 def logic_all(args: GenericVectorOrMatrixType) -> Scalar:
-    return Scalar.from_casadi_sx(_ca.logic_all(to_sx(args)))
+    return Scalar.from_casadi_sx(ca.logic_all(to_sx(args)))
 
 
 # %% trinary logic
-def trinary_logic_not(expression: Scalar) -> Scalar:
+def trinary_logic_not(expression: FloatVariable | Scalar) -> Scalar:
     """
             |   Not
     ------------------
@@ -1758,7 +1729,7 @@ def trinary_logic_not(expression: Scalar) -> Scalar:
     return Scalar.from_casadi_sx(to_sx(1) - to_sx(expression))
 
 
-def trinary_logic_and(*args: Scalar) -> Scalar:
+def trinary_logic_and(*args: FloatVariable | Scalar) -> Scalar:
     """
       AND   |  True   | Unknown | False
     ------------------+---------+-------
@@ -1782,7 +1753,7 @@ def trinary_logic_and(*args: Scalar) -> Scalar:
         return trinary_logic_and(args[0], trinary_logic_and(*args[1:]))
 
 
-def trinary_logic_or(*args: Scalar) -> Scalar:
+def trinary_logic_or(*args: FloatVariable | Scalar) -> Scalar:
     """
        OR   |  True   | Unknown | False
     ------------------+---------+-------
@@ -1828,27 +1799,28 @@ def trinary_logic_to_str(expression: Scalar) -> str:
 
     # Constant case
     if cas_expr.n_dep() == 0:
-        if expression.is_const_true():
+        if not cas_expr.is_constant():
+            return f'"{expression}"'
+        if float(expression) == 1.0:
             return "True"
-        if expression.is_const_false():
+        if float(expression) == 0.0:
             return "False"
-        if expression.is_const_unknown():
+        if float(expression) == 0.5:
             return "Unknown"
-        return f'"{expression}"'
 
     match cas_expr.op():
-        case _ca.OP_SUB:  # trinary "not" is 1-x
+        case ca.OP_SUB:  # trinary "not" is 1-x
             return f"not {trinary_logic_to_str(cas_expr.dep(1))}"
-        case _ca.OP_FMIN:  # trinary "and" is min(left, right)
+        case ca.OP_FMIN:  # trinary "and" is min(left, right)
             left = trinary_logic_to_str(cas_expr.dep(0))
             right = trinary_logic_to_str(cas_expr.dep(1))
             return f"({left} and {right})"
-        case _ca.OP_FMAX:  # trinary "or" is max(left, right)
+        case ca.OP_FMAX:  # trinary "or" is max(left, right)
             left = trinary_logic_to_str(cas_expr.dep(0))
             right = trinary_logic_to_str(cas_expr.dep(1))
             return f"({left} or {right})"
         case _:
-            raise SymbolicMathError(f"cannot convert {expression} to a string")
+            raise SymbolicMathError(message=f"cannot convert {expression} to a string")
 
 
 # %% ifs
@@ -1871,7 +1843,7 @@ def if_else(
     else_result_sx = to_sx(else_result)
     return_type = _create_return_type(if_result)
     return return_type.from_casadi_sx(
-        _ca.if_else(condition, if_result_sx, else_result_sx)
+        ca.if_else(condition, if_result_sx, else_result_sx)
     )
 
 
@@ -1890,7 +1862,7 @@ def if_greater(
     """
     a = to_sx(a)
     b = to_sx(b)
-    return if_else(_ca.gt(a, b), if_result, else_result)
+    return if_else(ca.gt(a, b), if_result, else_result)
 
 
 def if_less(
@@ -1908,7 +1880,7 @@ def if_less(
     """
     a = to_sx(a)
     b = to_sx(b)
-    return if_else(_ca.lt(a, b), if_result, else_result)
+    return if_else(ca.lt(a, b), if_result, else_result)
 
 
 def if_greater_zero(
@@ -1924,7 +1896,7 @@ def if_greater_zero(
         return else_result
     """
     condition = to_sx(condition)
-    return if_else(_ca.gt(condition, 0), if_result, else_result)
+    return if_else(ca.gt(condition, 0), if_result, else_result)
 
 
 def if_greater_eq_zero(
@@ -1957,7 +1929,7 @@ def if_greater_eq(
     """
     a = to_sx(a)
     b = to_sx(b)
-    return if_else(_ca.ge(a, b), if_result, else_result)
+    return if_else(ca.ge(a, b), if_result, else_result)
 
 
 def if_less_eq(
@@ -2006,12 +1978,12 @@ def if_eq(
     """
     a = to_sx(a)
     b = to_sx(b)
-    return if_else(_ca.eq(a, b), if_result, else_result)
+    return if_else(ca.eq(a, b), if_result, else_result)
 
 
 def if_eq_cases(
     a: ScalarData,
-    b_result_cases: _te.Iterable[_te.Tuple[ScalarData, GenericSymbolicType]],
+    b_result_cases: Iterable[Tuple[ScalarData, GenericSymbolicType]],
     else_result: GenericSymbolicType,
 ) -> GenericSymbolicType:
     """
@@ -2028,12 +2000,12 @@ def if_eq_cases(
     for b, b_result in b_result_cases:
         b_sx = to_sx(b)
         b_result_sx = to_sx(b_result)
-        result_sx = _ca.if_else(_ca.eq(a_sx, b_sx), b_result_sx, result_sx)
+        result_sx = ca.if_else(ca.eq(a_sx, b_sx), b_result_sx, result_sx)
     return _create_return_type(a).from_casadi_sx(result_sx)
 
 
 def if_cases(
-    cases: _te.Sequence[_te.Tuple[ScalarData, GenericSymbolicType]],
+    cases: Sequence[Tuple[ScalarData, GenericSymbolicType]],
     else_result: GenericSymbolicType,
 ) -> GenericSymbolicType:
     """
@@ -2049,13 +2021,13 @@ def if_cases(
     for i in reversed(range(len(cases))):
         case = to_sx(cases[i][0])
         case_result = to_sx(cases[i][1])
-        result_sx = _ca.if_else(case, case_result, result_sx)
+        result_sx = ca.if_else(case, case_result, result_sx)
     return _create_return_type(else_result).from_casadi_sx(result_sx)
 
 
 def if_less_eq_cases(
     a: ScalarData,
-    b_result_cases: _te.Sequence[_te.Tuple[ScalarData, GenericSymbolicType]],
+    b_result_cases: Sequence[Tuple[ScalarData, GenericSymbolicType]],
     else_result: GenericSymbolicType,
 ) -> GenericSymbolicType:
     """
@@ -2073,15 +2045,15 @@ def if_less_eq_cases(
     for i in reversed(range(len(b_result_cases))):
         b_sx = to_sx(b_result_cases[i][0])
         b_result_sx = to_sx(b_result_cases[i][1])
-        result_sx = _ca.if_else(_ca.le(a_sx, b_sx), b_result_sx, result_sx)
+        result_sx = ca.if_else(ca.le(a_sx, b_sx), b_result_sx, result_sx)
     return _create_return_type(a).from_casadi_sx(result_sx)
 
 
 # %% type hints
 
-NumericalScalar = bool | int | _np.int64 | float | np.float64 | _IntEnum
-NumericalVector = _np.ndarray | _te.Iterable[NumericalScalar]
-NumericalMatrix = _np.ndarray | _te.Iterable[_te.Iterable[NumericalScalar]]
+NumericalScalar = bool | int | np.int64 | float | np.float64 | IntEnum
+NumericalVector = np.ndarray | Iterable[NumericalScalar]
+NumericalMatrix = np.ndarray | Iterable[Iterable[NumericalScalar]]
 
 SymbolicScalar = FloatVariable | Scalar
 
@@ -2089,12 +2061,12 @@ ScalarData = NumericalScalar | SymbolicScalar
 VectorData = NumericalVector | Vector
 MatrixData = NumericalMatrix | Matrix
 
-GenericSymbolicType = _te.TypeVar(
+GenericSymbolicType = TypeVar(
     "GenericSymbolicType",
     bound=SymbolicMathType,
 )
 
-GenericVectorOrMatrixType = _te.TypeVar(
+GenericVectorOrMatrixType = TypeVar(
     "GenericVectorOrMatrixType",
     Vector,
     Matrix,

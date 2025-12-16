@@ -1,13 +1,9 @@
-import keyword
 from typing import Union, Iterable
 
-import hypothesis.strategies as st
 import numpy as np
-from hypothesis import assume
-from hypothesis.strategies import composite
 from numpy import pi
 
-import semantic_digital_twin.spatial_types.spatial_types as cas
+import krrood.symbolic_math.symbolic_math as cas
 from .reference_implementations import shortest_angular_distance
 
 all_expressions_float_np = Union[

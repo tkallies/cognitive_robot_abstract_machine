@@ -10,7 +10,7 @@ from typing_extensions import Dict, Any
 from .world_entity import WorldEntity, WorldEntityWithID
 from ..datastructures.prefixed_name import PrefixedName
 from ..exceptions import UsageError
-from ..spatial_types import spatial_types as cas
+import krrood.symbolic_math.symbolic_math as cas
 from ..spatial_types.derivatives import Derivatives, DerivativeMap
 
 

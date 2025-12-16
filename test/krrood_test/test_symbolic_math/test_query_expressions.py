@@ -4,7 +4,7 @@ from krrood.entity_query_language.entity import (
     contains,
 )
 from krrood.entity_query_language.entity_result_processors import the, a, an
-from semantic_digital_twin.spatial_types import Expression
+from krrood.symbolic_math.symbolic_math import Expression
 
 from semantic_digital_twin.testing import world_setup
 from semantic_digital_twin.world_description.degree_of_freedom import PositionVariable

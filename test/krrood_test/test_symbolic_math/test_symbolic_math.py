@@ -1,5 +1,6 @@
 import operator
 
+import casadi as ca
 import numpy as np
 import pytest
 import scipy
@@ -7,16 +8,13 @@ import scipy
 import krrood.symbolic_math.symbolic_math as cas
 from krrood.symbolic_math.exceptions import (
     HasFreeVariablesError,
-    NotScalerError,
     NotSquareMatrixError,
 )
 from test.krrood_test.test_symbolic_math.reference_implementations import (
     normalize_angle_positive,
     shortest_angular_distance,
     normalize_angle,
-    rotation_matrix_from_quaternion,
 )
-import casadi as ca
 
 TrinaryTrue = 1
 TrinaryFalse = 0
@@ -118,7 +116,6 @@ class TestLogic3:
             actual = cas.trinary_logic_not(cas.Scalar(i))
             assert expected == actual, f"a={i}, expected {expected}, actual {actual}"
 
-    @pytest.mark.skip("future problem")
     def test_trinary_logic_to_str(self):
         a = cas.FloatVariable(name="a")
         b = cas.FloatVariable(name="b")
@@ -128,6 +125,13 @@ class TestLogic3:
         )
         expression_str = cas.trinary_logic_to_str(expression)
         assert expression_str == '("a" and ("b" or not "c"))'
+
+        const_expr = cas.trinary_logic_and(
+            cas.Scalar.const_true(),
+            cas.trinary_logic_or(a, cas.Scalar.const_trinary_unknown()),
+        )
+        const_expr_str = cas.trinary_logic_to_str(const_expr)
+        assert const_expr_str == '("a" or Unknown)'
 
 
 class TestIfElse:
@@ -416,11 +420,11 @@ class TestExpression:
 
     def test_create(self):
         cas.Expression(data=cas.FloatVariable(name="muh"))
-        cas.Expression(data=[cas._ca.SX(1), cas._ca.SX.sym("muh")])
+        cas.Expression(data=[ca.SX(1), ca.SX.sym("muh")])
         m = cas.Expression(data=np.eye(4))
         m = cas.Expression(data=m)
         assert np.allclose(m, np.eye(4))
-        m = cas.Expression(cas._ca.SX(np.eye(4)))
+        m = cas.Expression(ca.SX(np.eye(4)))
         assert np.allclose(m, np.eye(4))
         m = cas.Expression(data=[1, 1])
         assert np.allclose(m, np.array([1, 1]))
