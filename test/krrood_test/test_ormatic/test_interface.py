@@ -5,9 +5,9 @@ from krrood.ormatic.alternative_mappings import FunctionMapping, UncallableFunct
 from krrood.ormatic.dao import (
     to_dao,
     is_data_column,
-    NoDAOFoundError,
     ToDAOState,
 )
+from krrood.ormatic.exceptions import NoDAOFoundError
 from .._dataset.example_classes import *
 from .._dataset.ormatic_interface import *
 
@@ -616,6 +616,7 @@ def test_multiple_inheritance(session, database):
 def test_list_of_enum(session, database):
     obj = ListOfEnum([TestEnum.OPTION_A, TestEnum.OPTION_B, TestEnum.OPTION_C])
     dao = to_dao(obj)
+
     session.add(dao)
     session.commit()
 
@@ -627,3 +628,17 @@ def test_list_of_enum(session, database):
         TestEnum.OPTION_B,
         TestEnum.OPTION_C,
     ]
+
+
+def test_persons(session, database):
+    p1 = Person(name="Alice")
+    p2 = Person(name="Bob")
+    p1.knows.append(p2)
+
+    dao = to_dao(p1)
+    session.add(dao)
+    session.commit()
+
+    q = session.scalar(select(PersonDAO).where(PersonDAO.name == "Alice"))
+    assert q.name == "Alice"
+    assert q.knows[0].name == "Bob"

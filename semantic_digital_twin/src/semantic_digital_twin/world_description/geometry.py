@@ -11,6 +11,8 @@ import numpy as np
 import trimesh
 import trimesh.exchange.stl
 from PIL import Image
+from krrood.adapters.json_serializer import SubclassJSONSerializer
+from krrood.adapters.exceptions import JSON_TYPE_NAME
 from random_events.interval import SimpleInterval, Bound, closed
 from random_events.product_algebra import SimpleEvent
 from trimesh.visual.texture import TextureVisuals, SimpleMaterial

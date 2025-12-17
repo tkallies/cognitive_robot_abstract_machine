@@ -1,4 +1,5 @@
-from krrood.ormatic.dao import HasGeneric, NoGenericError
+from krrood.ormatic.dao import HasGeneric
+from krrood.ormatic.exceptions import NoGenericError
 from .._dataset.example_classes import Position
 from .._dataset.ormatic_interface import PositionDAO
 

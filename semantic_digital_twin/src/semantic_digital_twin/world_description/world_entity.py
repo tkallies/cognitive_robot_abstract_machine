@@ -15,6 +15,13 @@ from uuid import UUID, uuid4
 import numpy as np
 import trimesh
 import trimesh.boolean
+from krrood.adapters.json_serializer import (
+    SubclassJSONSerializer,
+    to_json,
+    from_json,
+)
+from krrood.adapters.exceptions import JSON_TYPE_NAME
+from krrood.entity_query_language.predicate import Symbol
 from scipy.stats import geom
 from trimesh.proximity import closest_point, nearby_faces
 from trimesh.sample import sample_surface

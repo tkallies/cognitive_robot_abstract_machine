@@ -606,9 +606,7 @@ class MultipleInheritance(PrimaryBase, Mixin):
     extra_attribute: str
 
 
-# %% Test List of Enum
-
-
+# %% Test enum list
 class TestEnum(Enum):
     OPTION_A = "option_a"
     OPTION_B = "option_b"
@@ -628,12 +626,14 @@ class ListOfEnum(Symbol):
 @dataclass
 class ForwardRefTypeA(Symbol):
     """A simple class used as a forward reference target."""
+
     value: str = ""
 
 
 @dataclass
 class ForwardRefTypeB(Symbol):
     """Another class used as a forward reference target."""
+
     count: int = 0
 
 
@@ -644,5 +644,13 @@ class MultipleForwardRefContainer(Symbol):
     This tests that the forward reference resolution can handle
     multiple unresolved types that need to be resolved iteratively.
     """
+
     ref_a: Optional[ForwardRefTypeA] = None
     ref_b: Optional[ForwardRefTypeB] = None
+
+
+@dataclass
+class Person:
+    name: str
+
+    knows: List[Person] = field(default_factory=list)
