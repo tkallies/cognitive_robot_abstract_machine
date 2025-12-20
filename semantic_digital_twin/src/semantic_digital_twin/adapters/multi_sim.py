@@ -1093,7 +1093,14 @@ class MultiSimBuilder(ABC):
             with self.world.modify_world():
                 root = Body(name=PrefixedName("world"))
                 self.world.add_body(root)
-        elif self.world.bodies[0].name.name != "world":
+        elif self.world.root.name.name != "world":
+            free_joint_bodies = [
+                body
+                for body in self.world.bodies
+                if isinstance(body.parent_connection, Connection6DoF)
+                and body.parent_connection.parent == self.world.root
+            ]
+
             with world.modify_world():
                 root_bodies = [
                     body for body in self.world.bodies if body.parent_connection is None
@@ -1103,6 +1110,10 @@ class MultiSimBuilder(ABC):
                 for root_body in root_bodies:
                     connection = FixedConnection(parent=root, child=root_body)
                     self.world.add_connection(connection)
+
+            with world.modify_world():
+                for free_joint_body in free_joint_bodies:
+                    self.world.move_branch(free_joint_body, root)
 
         self._start_build(file_path=file_path)
 

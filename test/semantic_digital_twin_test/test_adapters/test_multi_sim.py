@@ -6,6 +6,7 @@ import unittest
 import mujoco
 import numpy
 
+from semantic_digital_twin.adapters.mesh import STLParser
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import ParsingError
@@ -54,7 +55,7 @@ logger.addHandler(handler)
 logger.setLevel(logging.DEBUG)
 headless = os.environ.get("CI", "false").lower() == "true"
 # headless = True
-only_run_test_in_CI = os.environ.get("CI", "false").lower() == "false"
+only_run_test_in_CI = os.environ.get("CI", "false").lower() == "true"
 
 
 @unittest.skipIf(
@@ -592,6 +593,39 @@ class MujocoSimTestCase(unittest.TestCase):
             self.skipTest("Could not parse file tracy.urdf.")
         viewer = MultiverseViewer()
         multi_sim = MujocoSim(viewer=viewer, world=dae_world, headless=headless)
+        self.assertIsInstance(multi_sim.simulator, MultiverseMujocoConnector)
+        self.assertEqual(multi_sim.simulator.file_path, "/tmp/scene.xml")
+        self.assertIs(multi_sim.simulator.headless, headless)
+        self.assertEqual(multi_sim.simulator.step_size, self.step_size)
+        multi_sim.start_simulation()
+        start_time = time.time()
+        time.sleep(5.0)
+        multi_sim.stop_simulation()
+        self.assertGreaterEqual(time.time() - start_time, 5.0)
+
+    def test_mujocosim_world_with_added_objects(self):
+        viewer = MultiverseViewer()
+        milk_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..",
+            "..",
+            "..",
+            "semantic_digital_twin",
+            "resources",
+            "stl",
+            "milk.stl",
+        )
+        stl_parser = STLParser(milk_path)
+        mesh_world = stl_parser.parse()
+        transformation = TransformationMatrix.from_xyz_rpy(
+            x=0.5, reference_frame=self.test_urdf_1_world.root
+        )
+        with self.test_urdf_1_world.modify_world():
+            self.test_urdf_1_world.merge_world_at_pose(mesh_world, transformation)
+
+        multi_sim = MujocoSim(
+            viewer=viewer, world=self.test_urdf_1_world, headless=headless
+        )
         self.assertIsInstance(multi_sim.simulator, MultiverseMujocoConnector)
         self.assertEqual(multi_sim.simulator.file_path, "/tmp/scene.xml")
         self.assertIs(multi_sim.simulator.headless, headless)
