@@ -53,7 +53,18 @@ def is_data_column(column: Column):
 
 
 @dataclass
-class ToDAOState:
+class ToDataAccessObjectWorkItem:
+    """
+    Work item for converting an object to a Data Access Object.
+    """
+
+    source_object: Any
+    dao_instance: DataAccessObject
+    alternative_base: Optional[Type[DataAccessObject]] = None
+
+
+@dataclass
+class ToDataAccessObjectState:
     """
     Encapsulates the conversion state for to_dao conversions.
 
@@ -75,43 +86,61 @@ class ToDAOState:
     Dictionary that prevents objects from being garbage collected.
     """
 
-    queue: deque = field(default_factory=deque)
+    queue: deque[ToDataAccessObjectWorkItem] = field(default_factory=deque)
     """
-    Queue of (source_object, dao_instance, base_to_use) tuples to be processed.
+    Queue of work items to be processed.
     """
 
     def add_to_queue(
-        self, obj: Any, dao_instance: Any, base: Optional[Type[DataAccessObject]] = None
+        self,
+        source_object: Any,
+        dao_instance: DataAccessObject,
+        alternative_base: Optional[Type[DataAccessObject]] = None,
     ):
-        self.queue.append((obj, dao_instance, base))
+        """
+        Add a new work item to the processing queue.
+        """
+        self.queue.append(
+            ToDataAccessObjectWorkItem(source_object, dao_instance, alternative_base)
+        )
 
-    def get_existing(self, obj: Any) -> Any:
+    def get_existing(self, source_object: Any) -> Optional[DataAccessObject]:
         """
         Return an existing DAO for the given object if it was already created.
         """
-        return self.memo.get(id(obj))
+        return self.memo.get(id(source_object))
 
     def apply_alternative_mapping_if_needed(
-        self, dao_cls: Type[DataAccessObject], obj: Any
+        self, dao_clazz: Type[DataAccessObject], source_object: Any
     ) -> Any:
         """
         Apply AlternativeMapping.to_dao if the dao class uses an alternative mapping.
         """
-        if issubclass(dao_cls.original_class(), AlternativeMapping):
-            return dao_cls.original_class().to_dao(obj, state=self)
-        return obj
+        if issubclass(dao_clazz.original_class(), AlternativeMapping):
+            return dao_clazz.original_class().to_dao(source_object, state=self)
+        return source_object
 
-    def register(self, obj: Any, result: Any) -> None:
+    def register(self, source_object: Any, dao_instance: DataAccessObject) -> None:
         """
         Register a partially built DAO in the memoization stores to break cycles.
         """
-        oid = id(obj)
-        self.memo[oid] = result
-        self.keep_alive[oid] = obj
+        object_id = id(source_object)
+        self.memo[object_id] = dao_instance
+        self.keep_alive[object_id] = source_object
 
 
 @dataclass
-class FromDAOState:
+class FromDataAccessObjectWorkItem:
+    """
+    Work item for converting a Data Access Object back to a domain object.
+    """
+
+    dao_instance: DataAccessObject
+    domain_object: Any
+
+
+@dataclass
+class FromDataAccessObjectState:
     """
     Encapsulates the conversion state for from_dao conversions.
 
@@ -132,99 +161,53 @@ class FromDAOState:
     Dictionary that marks objects as currently being processed by the `from_dao` method.
     """
 
-    queue: deque = field(default_factory=deque)
+    queue: deque[FromDataAccessObjectWorkItem] = field(default_factory=deque)
     """
-    Queue of (dao_instance, domain_object) tuples to be processed.
+    Queue of work items to be processed.
     """
 
-    def add_to_queue(self, dao_instance: Any, domain_object: Any):
-        self.queue.append((dao_instance, domain_object))
+    def add_to_queue(self, dao_instance: DataAccessObject, domain_object: Any):
+        """
+        Add a new work item to the processing queue.
+        """
+        self.queue.append(FromDataAccessObjectWorkItem(dao_instance, domain_object))
 
-    def has(self, dao_obj: Any) -> bool:
-        return id(dao_obj) in self.memo
+    def has(self, dao_instance: DataAccessObject) -> bool:
+        """
+        Check if the given DAO instance has already been converted.
+        """
+        return id(dao_instance) in self.memo
 
-    def get(self, dao_obj: Any) -> Any:
-        return self.memo[id(dao_obj)]
+    def get(self, dao_instance: DataAccessObject) -> Any:
+        """
+        Get the domain object corresponding to the given DAO instance.
+        """
+        return self.memo[id(dao_instance)]
 
-    def allocate_and_memoize(self, dao_obj: Any, original_cls: Type) -> Any:
+    def allocate_and_memoize(
+        self, dao_instance: DataAccessObject, original_clazz: Type
+    ) -> Any:
         """
         Allocates a new instance of the specified class and stores it in a memoization
         dictionary to avoid duplicating object construction for the same identifier.
-
-        :param dao_obj: The data access object whose identifier is used to memoize
-            the created instance.
-        :param original_cls: The class type to create a new instance for.
-        :return: A newly allocated instance of the given class.
         """
-        result = original_cls.__new__(original_cls)
-        self.memo[id(dao_obj)] = result
-        self.in_progress[id(dao_obj)] = True
+        result = original_clazz.__new__(original_clazz)
+        self.memo[id(dao_instance)] = result
+        self.in_progress[id(dao_instance)] = True
         return result
 
-    def parse_single(self, value: Any) -> tuple[Any, bool]:
+    def apply_circular_fixes(
+        self, domain_object: Any, circular_references: Dict[str, Any]
+    ) -> None:
         """
-        Parses a single value from the DAO context. This method checks whether the given
-        value is `None` and returns a tuple containing the parsed object and a boolean
-        flag indicating whether the parsed object exists within the `memo` dictionary,
-        based on its unique identifier.
-
-        :param value: The value to be parsed. It can be any type.
-        :return: A tuple containing the parsed object and a boolean flag. The boolean
-            indicates whether the parsed value exists in the `memo` dictionary.
+        Fixes circular references in the provided `domain_object`.
         """
-        if value is None:
-            return None, False
-        parsed = value.from_dao(state=self)
-        return parsed, parsed is self.memo.get(id(value))
-
-    def parse_collection(self, value: Any) -> tuple[Any, List[Any]]:
-        """
-        Parses a given collection of objects, converting each element using its ``from_dao``
-        method and handling circular references.
-
-        This method takes an input collection, processes each element by converting it
-        using a state, and identifies circular references if any of the converted instances
-        match previously processed elements in the memo dictionary. The method returns the
-        processed collection with all objects converted and a list of circular references that
-        could not be resolved.
-
-        :param value: The collection to be parsed, which can contain objects with a
-            ``from_dao`` method. It may also contain circular references.
-        :return: A tuple where the first element is the processed collection with all
-            objects converted using ``from_dao``, and the second element is a list of
-            circular references that could not be fully resolved.
-        """
-        if not value:
-            return value, []
-        instances = []
-        circular_values: List[Any] = []
-        for v in value:
-            instance = v.from_dao(state=self)
-            if instance is self.memo.get(id(v)):
-                circular_values.append(v)
-            instances.append(instance)
-        return type(value)(instances), circular_values
-
-    def apply_circular_fixes(self, result: Any, circular_refs: Dict[str, Any]) -> None:
-        """
-        Fixes circular references in the provided `result` object using the `circular_refs`
-        dictionary. This method resolves values in `circular_refs` to objects stored in the
-        `memo` dictionary and assigns the resolved reference back to the `result` object.
-
-        :param result: The object whose circular references need to be fixed.
-        :param circular_refs: A dictionary mapping attribute names in `result` to circular
-            reference values. The keys in the dictionary specify attributes in `result`, and
-            the values are either lists or single objects that are resolved using the `memo`
-            dictionary.
-        """
-        for key, value in circular_refs.items():
+        for key, value in circular_references.items():
             if isinstance(value, list):
-                fixed_list = []
-                for v in value:
-                    fixed_list.append(self.memo.get(id(v)))
-                setattr(result, key, fixed_list)
+                fixed_list = [self.memo.get(id(v)) for v in value]
+                setattr(domain_object, key, fixed_list)
             else:
-                setattr(result, key, self.memo.get(id(value)))
+                setattr(domain_object, key, self.memo.get(id(value)))
 
 
 class HasGeneric(Generic[T]):
@@ -269,25 +252,13 @@ class DataAccessObject(HasGeneric[T]):
     def __init__(self, *args, **kwargs):
         """
         Allow constructing DAO instances with positional arguments that map to
-        data columns (non-PK, non-FK, non-polymorphic) in declaration order.
-
-        Falls back to the default SQLAlchemy initialization if positional
-        arguments do not match the number of data columns or if keyword
-        arguments are provided.
+        data columns.
         """
         if args and not kwargs:
-            try:
-                mapper: sqlalchemy.orm.Mapper = sqlalchemy.inspection.inspect(
-                    type(self)
-                )
-                data_columns = [c for c in mapper.columns if is_data_column(c)]
-                if len(args) == len(data_columns):
-                    kwargs = {col.name: value for col, value in zip(data_columns, args)}
-                    super().__init__(**kwargs)
-                    return
-            except Exception:
-                # If inspection fails or mapping is not aligned, defer to default behavior
-                pass
+            positional_kwargs = self._map_positional_arguments_to_data_columns(args)
+            if positional_kwargs:
+                super().__init__(**positional_kwargs)
+                return
         super().__init__(*args, **kwargs)
 
     def __init_subclass__(cls, **kwargs):
@@ -296,36 +267,43 @@ class DataAccessObject(HasGeneric[T]):
 
         def init_with_positional(self, *args, **kw):
             if args and not kw:
-                try:
-                    mapper: sqlalchemy.orm.Mapper = sqlalchemy.inspection.inspect(
-                        type(self)
-                    )
-                    data_columns = [c for c in mapper.columns if is_data_column(c)]
-                    if len(args) == len(data_columns):
-                        built = {
-                            col.name: value for col, value in zip(data_columns, args)
-                        }
-                        return (
-                            original_init(self, **built)
-                            if original_init
-                            else super(cls, self).__init__(**built)
-                        )
-                except Exception:
-                    pass
-            return (
-                original_init(self, *args, **kw)
-                if original_init
-                else super(cls, self).__init__(*args, **kw)
-            )
+                positional_kwargs = self._map_positional_arguments_to_data_columns(args)
+                if positional_kwargs:
+                    if original_init:
+                        return original_init(self, **positional_kwargs)
+                    return super(cls, self).__init__(**positional_kwargs)
+            if original_init:
+                return original_init(self, *args, **kw)
+            return super(cls, self).__init__(*args, **kw)
 
         # Inject only if the class did not already define a positional-friendly constructor
         cls.__init__ = init_with_positional
 
+    def _map_positional_arguments_to_data_columns(
+        self, arguments: Tuple[Any, ...]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Map positional arguments to data columns if the number of arguments matches.
+        """
+        try:
+            mapper: sqlalchemy.orm.Mapper = sqlalchemy.inspection.inspect(type(self))
+            data_columns = [
+                column for column in mapper.columns if is_data_column(column)
+            ]
+            if len(arguments) == len(data_columns):
+                return {
+                    column.name: value for column, value in zip(data_columns, arguments)
+                }
+        except Exception:
+            # If inspection fails or mapping is not aligned, fall back
+            pass
+        return None
+
     @classmethod
     def to_dao(
         cls,
-        obj: T,
-        state: Optional[ToDAOState] = None,
+        source_object: T,
+        state: Optional[ToDataAccessObjectState] = None,
         register=True,
     ) -> _DAO:
         """
@@ -335,36 +313,38 @@ class DataAccessObject(HasGeneric[T]):
         mappings when needed, and delegates to the appropriate conversion
         strategy based on inheritance.
 
-        :param obj: Object to be converted into its DAO equivalent
+        :param source_object: Object to be converted into its DAO equivalent
         :param state: The state to use as context
         :param register: Whether to register the DAO class in the memo.
         :return: Instance of the DAO class (_DAO) that represents the input object after conversion
         """
 
-        state = state or ToDAOState()
+        state = state or ToDataAccessObjectState()
 
         # check if this object has been build already
-        existing = state.get_existing(obj)
+        existing = state.get_existing(source_object)
         if existing is not None:
             return existing
 
-        dao_obj = state.apply_alternative_mapping_if_needed(cls, obj)
+        dao_source_object = state.apply_alternative_mapping_if_needed(
+            cls, source_object
+        )
         # If alternative mapping returned an object of a different type that is not a DAO,
         # it might be the case for recursive AlternativeMappings.
         # But if it's already a DAO (of this class or a subclass), we should use it.
-        if isinstance(dao_obj, cls):
+        if isinstance(dao_source_object, cls):
             if register:
-                state.register(obj, dao_obj)
-            return dao_obj
+                state.register(source_object, dao_source_object)
+            return dao_source_object
 
         # Determine the appropriate DAO base to consider for alternative mappings.
-        alt_base: Optional[Type[DataAccessObject]] = None
-        for b in cls.__mro__[1:]:  # skip cls itself
+        alternative_base: Optional[Type[DataAccessObject]] = None
+        for base_clazz in cls.__mro__[1:]:  # skip cls itself
             try:
-                if issubclass(b, DataAccessObject) and issubclass(
-                    b.original_class(), AlternativeMapping
+                if issubclass(base_clazz, DataAccessObject) and issubclass(
+                    base_clazz.original_class(), AlternativeMapping
                 ):
-                    alt_base = b
+                    alternative_base = base_clazz
                     break
             except Exception:
                 # Some bases may not be DAOs or may not have generic info; skip safely
@@ -373,23 +353,27 @@ class DataAccessObject(HasGeneric[T]):
         result = cls()
 
         if register:
-            state.register(obj, result)
-            if id(obj) != id(dao_obj):
-                state.register(dao_obj, result)
+            state.register(source_object, result)
+            if id(source_object) != id(dao_source_object):
+                state.register(dao_source_object, result)
 
         # Add to queue for attribute/relationship filling
         is_entry_call = len(state.queue) == 0
-        state.add_to_queue(dao_obj, result, alt_base)
+        state.add_to_queue(dao_source_object, result, alternative_base)
 
         if is_entry_call:
             while state.queue:
-                current_obj, current_dao, current_base = state.queue.popleft()
-                if current_base is not None:
-                    current_dao.fill_dao_if_subclass_of_alternative_mapping(
-                        obj=current_obj, base=current_base, state=state
+                work_item = state.queue.popleft()
+                if work_item.alternative_base is not None:
+                    work_item.dao_instance.fill_dao_if_subclass_of_alternative_mapping(
+                        source_object=work_item.source_object,
+                        alternative_base=work_item.alternative_base,
+                        state=state,
                     )
                 else:
-                    current_dao.fill_dao_default(obj=current_obj, state=state)
+                    work_item.dao_instance.fill_dao_default(
+                        source_object=work_item.source_object, state=state
+                    )
 
         return result
 
@@ -403,105 +387,89 @@ class DataAccessObject(HasGeneric[T]):
             class_to_check.original_class(), AlternativeMapping
         )
 
-    def to_dao_default(self, obj: T, state: ToDAOState):
+    @classmethod
+    def _find_alternative_mapping_base(cls) -> Optional[Type[DataAccessObject]]:
         """
-        Convert the given object into a Data Access Object (DAO) representation.
-
-        The method extracts column and relationship data.
-
-        :param obj: The source object to be converted into a DAO representation.
-        :param state: The conversion state for memoization and lifecycle control.
+        Find the first base class that uses an alternative mapping.
         """
-        self.fill_dao_default(obj, state)
+        for base_clazz in cls.__mro__[1:]:
+            try:
+                if issubclass(base_clazz, DataAccessObject) and issubclass(
+                    base_clazz.original_class(), AlternativeMapping
+                ):
+                    return base_clazz
+            except (AttributeError, TypeError, NoGenericError):
+                continue
+        return None
 
-    def fill_dao_default(self, obj: T, state: ToDAOState):
+    def fill_dao_default(
+        self, source_object: T, state: ToDataAccessObjectState
+    ) -> None:
         """
         Populate this DAO instance with data from the given object.
         """
         mapper: sqlalchemy.orm.Mapper = sqlalchemy.inspection.inspect(type(self))
 
-        self.get_columns_from(obj=obj, columns=mapper.columns)
+        self.get_columns_from(source_object=source_object, columns=mapper.columns)
         self.fill_relationships_from(
-            obj=obj,
+            source_object=source_object,
             relationships=mapper.relationships,
             state=state,
         )
 
-    def to_dao_if_subclass_of_alternative_mapping(
-        self,
-        obj: T,
-        base: Type[DataAccessObject],
-        state: ToDAOState,
-    ):
-        """
-        Transforms the given object into a corresponding DAO if it is a
-        subclass of an alternatively mapped entity.
-        """
-        self.fill_dao_if_subclass_of_alternative_mapping(obj, base, state)
-
     def fill_dao_if_subclass_of_alternative_mapping(
         self,
-        obj: T,
-        base: Type[DataAccessObject],
-        state: ToDAOState,
-    ):
+        source_object: T,
+        alternative_base: Type[DataAccessObject],
+        state: ToDataAccessObjectState,
+    ) -> None:
         """
         Populate this DAO instance if it is a subclass of an alternatively mapped entity.
         """
-
-        # Temporarily remove the object from the memo dictionary to allow the parent DAO to be created
-        temp_dao = None
-        if id(obj) in state.memo:
-            temp_dao = state.memo[id(obj)]
-            del state.memo[id(obj)]
+        # Temporarily remove the object from the memo to allow the parent DAO to be created separately
+        temp_dao = state.memo.pop(id(source_object), None)
 
         # create dao of alternatively mapped superclass
-        parent_dao = base.original_class().to_dao(obj, state)
+        parent_dao = alternative_base.original_class().to_dao(source_object, state)
 
         # Restore the object in the memo dictionary
         if temp_dao is not None:
-            state.memo[id(obj)] = temp_dao
+            state.memo[id(source_object)] = temp_dao
 
-        # Fill super class columns
-        parent_mapper = sqlalchemy.inspection.inspect(base)
         mapper: sqlalchemy.orm.Mapper = sqlalchemy.inspection.inspect(type(self))
-
-        # split up the columns in columns defined by the parent and columns defined by this dao
-        all_columns = mapper.columns
-        columns_of_parent = parent_mapper.columns
-        columns_of_this_table = [
-            c for c in all_columns if c.name not in columns_of_parent
-        ]
-
-        # copy values from superclass dao
-        self.get_columns_from(parent_dao, columns_of_parent)
-
-        # copy values that only occur in this dao (current table)
-        self.get_columns_from(obj, columns_of_this_table)
-
-        # Also ensure that columns declared on intermediate ancestors
-        parent_column_names = {c.name for c in columns_of_parent}
-        for prop in mapper.column_attrs:
-            try:
-                col = prop.columns[0]
-            except Exception:
-                continue
-            if is_data_column(col) and prop.key not in parent_column_names:
-                # take the value from the original object; attribute names match
-                setattr(self, prop.key, getattr(obj, prop.key))
-
-        # split relationships in relationships by parent and relationships by child
-        relationships_of_parent, relationships_of_this_table = (
-            self.partition_parent_child_relationships(parent_mapper, mapper)
+        parent_mapper: sqlalchemy.orm.Mapper = sqlalchemy.inspection.inspect(
+            alternative_base
         )
 
-        # get relationships from parent dao
+        # Split columns into those from parent and those from this DAO's table
+        columns_of_parent = parent_mapper.columns
+        parent_column_names = {c.name for c in columns_of_parent}
+        columns_of_this_table = [
+            c for c in mapper.columns if c.name not in parent_column_names
+        ]
+
+        # Copy values from parent DAO and original object
+        self.get_columns_from(parent_dao, columns_of_parent)
+        self.get_columns_from(source_object, columns_of_this_table)
+
+        # Ensure columns on intermediate ancestors are also covered
+        for prop in mapper.column_attrs:
+            if prop.key not in parent_column_names:
+                try:
+                    col = prop.columns[0]
+                    if is_data_column(col):
+                        setattr(self, prop.key, getattr(source_object, prop.key))
+                except (IndexError, AttributeError):
+                    continue
+
+        # Partition and fill relationships
+        relationships_of_parent, relationships_of_this_table = (
+            self._partition_parent_child_relationships(parent_mapper, mapper)
+        )
         self.fill_relationships_from(parent_dao, relationships_of_parent, state)
+        self.fill_relationships_from(source_object, relationships_of_this_table, state)
 
-        # get relationships from the current table
-        self.fill_relationships_from(obj, relationships_of_this_table, state)
-
-    def partition_parent_child_relationships(
+    def _partition_parent_child_relationships(
         self, parent: sqlalchemy.orm.Mapper, child: sqlalchemy.orm.Mapper
     ) -> Tuple[
         List[RelationshipProperty[Any]],
@@ -509,184 +477,110 @@ class DataAccessObject(HasGeneric[T]):
     ]:
         """
         Partition the relationships by parent-only and child-only relationships.
-
-        :param parent: The parent mapper to extract relationships from
-        :param child: The child mapper to extract relationships from
-        :return: A tuple of the relationships that are only in the parent and the relationships that are only in the child
         """
-        all_relationships = child.relationships
+        parent_rel_keys = {rel.key for rel in parent.relationships}
         relationships_of_parent = parent.relationships
-        relationship_names_of_parent = list(
-            map(lambda x: x.key, relationships_of_parent)
-        )
-
-        relationships_of_child = list(
-            filter(
-                lambda x: x.key not in relationship_names_of_parent, all_relationships
-            )
-        )
+        relationships_of_child = [
+            rel for rel in child.relationships if rel.key not in parent_rel_keys
+        ]
         return relationships_of_parent, relationships_of_child
 
-    def get_columns_from(self, obj: T, columns: Iterable[Column]) -> None:
+    def get_columns_from(self, source_object: Any, columns: Iterable[Column]) -> None:
         """
         Retrieves and assigns values from specified columns of a given object.
-
-        Assumes that the attribute names of `obj` and `self` are the same.
-
-        :param obj: The object from which the column values are retrieved.
-        :param columns: A list of columns to be processed.
-
-        Raises:
-            AttributeError: Raised if the provided object or column does not have
-                the corresponding attribute during assignment.
         """
         for column in columns:
             if is_data_column(column):
-                setattr(self, column.name, getattr(obj, column.name))
+                setattr(self, column.name, getattr(source_object, column.name))
 
     def fill_relationships_from(
         self,
-        obj: T,
+        source_object: Any,
         relationships: Iterable[RelationshipProperty],
-        state: ToDAOState,
-    ):
+        state: ToDataAccessObjectState,
+    ) -> None:
         """
-        Retrieve and update relationships from an object based on the given relationship
-        properties.
-
-        This method delegates to focused helpers for single-valued and collection-valued
-        relationships to keep complexity low.
-
-        :param obj: The object from which the relationship values are retrieved.
-        :param relationships: A list of relationships to be processed.
-        :param state: The conversion state for memoization and lifecycle control.
+        Retrieve and update relationships from an object.
         """
         for relationship in relationships:
-            if relationship.direction == MANYTOONE or (
+            is_single = relationship.direction == MANYTOONE or (
                 relationship.direction == ONETOMANY and not relationship.uselist
-            ):
-                self._extract_single_relationship(
-                    obj=obj,
-                    relationship=relationship,
-                    state=state,
-                )
+            )
+            if is_single:
+                self._extract_single_relationship(source_object, relationship, state)
             elif relationship.direction in (ONETOMANY, MANYTOMANY):
                 self._extract_collection_relationship(
-                    obj=obj,
-                    relationship=relationship,
-                    state=state,
+                    source_object, relationship, state
                 )
 
     def _extract_single_relationship(
         self,
-        obj: T,
+        source_object: Any,
         relationship: RelationshipProperty,
-        state: ToDAOState,
+        state: ToDataAccessObjectState,
     ) -> None:
         """
         Extract a single-valued relationship and assign the corresponding DAO.
-        Check `get_relationships_from` for more information.
         """
-        value_in_obj = getattr(obj, relationship.key)
-        if value_in_obj is None:
+        value = getattr(source_object, relationship.key)
+        if value is None:
             setattr(self, relationship.key, None)
             return
 
-        dao_class = get_dao_class(type(value_in_obj))
-        if dao_class is None:
-            raise NoDAOFoundDuringParsingError(value_in_obj, type(self), relationship)
-
-        # Check if this object has been build already
-        existing = state.get_existing(value_in_obj)
-        if existing is not None:
-            setattr(self, relationship.key, existing)
-            return
-
-        # Allocate but do not populate yet
-        dao_obj_data = state.apply_alternative_mapping_if_needed(
-            dao_class, value_in_obj
-        )
-        if isinstance(dao_obj_data, dao_class):
-            state.register(value_in_obj, dao_obj_data)
-            setattr(self, relationship.key, dao_obj_data)
-            return
-
-        # Determine the appropriate DAO base to consider for alternative mappings.
-        alt_base: Optional[Type[DataAccessObject]] = None
-        for b in dao_class.__mro__[1:]:  # skip cls itself
-            try:
-                if issubclass(b, DataAccessObject) and issubclass(
-                    b.original_class(), AlternativeMapping
-                ):
-                    alt_base = b
-                    break
-            except Exception:
-                # Some bases may not be DAOs or may not have generic info; skip safely
-                continue
-
-        result = dao_class()
-        state.register(value_in_obj, result)
-        if id(value_in_obj) != id(dao_obj_data):
-            state.register(dao_obj_data, result)
-
-        state.add_to_queue(dao_obj_data, result, alt_base)
-        setattr(self, relationship.key, result)
+        dao_instance = self._get_or_queue_dao(value, state)
+        setattr(self, relationship.key, dao_instance)
 
     def _extract_collection_relationship(
         self,
-        obj: T,
+        source_object: Any,
         relationship: RelationshipProperty,
-        state: "ToDAOState",
+        state: ToDataAccessObjectState,
     ) -> None:
         """
         Extract a collection-valued relationship and assign a list of DAOs.
-        Check `get_relationships_from` for more information.
         """
-        result_list = []
-        value_in_obj = getattr(obj, relationship.key)
-        for v in value_in_obj:
-            dao_class = get_dao_class(type(v))
-            if dao_class is None:
-                raise NoDAOFoundDuringParsingError(v, type(self), relationship)
+        source_collection = getattr(source_object, relationship.key)
+        dao_collection = [self._get_or_queue_dao(v, state) for v in source_collection]
+        setattr(self, relationship.key, type(source_collection)(dao_collection))
 
-            # Check if this object has been build already
-            existing = state.get_existing(v)
-            if existing is not None:
-                result_list.append(existing)
-                continue
+    def _get_or_queue_dao(
+        self, source_object: Any, state: ToDataAccessObjectState
+    ) -> DataAccessObject:
+        """
+        Ensure a DAO exists for the given object and queue it for processing if new.
+        """
+        # Check if already built
+        existing = state.get_existing(source_object)
+        if existing is not None:
+            return existing
 
-            # Allocate but do not populate yet
-            dao_obj_data = state.apply_alternative_mapping_if_needed(dao_class, v)
-            if isinstance(dao_obj_data, dao_class):
-                state.register(v, dao_obj_data)
-                result_list.append(dao_obj_data)
-                continue
+        dao_clazz = get_dao_class(type(source_object))
+        if dao_clazz is None:
+            raise NoDAOFoundDuringParsingError(source_object, type(self))
 
-            # Determine the appropriate DAO base to consider for alternative mappings.
-            alt_base: Optional[Type[DataAccessObject]] = None
-            for b in dao_class.__mro__[1:]:  # skip cls itself
-                try:
-                    if issubclass(b, DataAccessObject) and issubclass(
-                        b.original_class(), AlternativeMapping
-                    ):
-                        alt_base = b
-                        break
-                except Exception:
-                    # Some bases may not be DAOs or may not have generic info; skip safely
-                    continue
+        # Check for alternative mapping
+        mapped_object = state.apply_alternative_mapping_if_needed(
+            dao_clazz, source_object
+        )
+        if isinstance(mapped_object, dao_clazz):
+            state.register(source_object, mapped_object)
+            return mapped_object
 
-            res = dao_class()
-            state.register(v, res)
-            if id(v) != id(dao_obj_data):
-                state.register(dao_obj_data, res)
+        # Create new DAO instance
+        result = dao_clazz()
+        state.register(source_object, result)
+        if id(source_object) != id(mapped_object):
+            state.register(mapped_object, result)
 
-            state.add_to_queue(dao_obj_data, res, alt_base)
-            result_list.append(res)
-        setattr(self, relationship.key, result_list)
+        # Queue for filling
+        alternative_base = dao_clazz._find_alternative_mapping_base()
+        state.add_to_queue(mapped_object, result, alternative_base)
+
+        return result
 
     def from_dao(
         self,
-        state: Optional[FromDAOState] = None,
+        state: Optional[FromDataAccessObjectState] = None,
     ) -> T:
         """
         Convert this Data Access Object into its domain model instance.
@@ -695,7 +589,7 @@ class DataAccessObject(HasGeneric[T]):
         then populate scalars and relationships, handle alternative mapping
         inheritance, initialize, and finally fix circular references.
         """
-        state = state or FromDAOState()
+        state = state or FromDataAccessObjectState()
 
         if state.has(self):
             return state.get(self)
@@ -703,87 +597,115 @@ class DataAccessObject(HasGeneric[T]):
         result = self._allocate_uninitialized_and_memoize(state)
 
         # Add to queue for processing
+        is_entry_call = len(state.queue) == 0
         state.add_to_queue(self, result)
 
-        if len(state.queue) == 1:
+        if is_entry_call:
             while state.queue:
-                current_dao, current_obj = state.queue.popleft()
-                current_dao._fill_from_dao(current_obj, state)
+                work_item = state.queue.popleft()
+                work_item.dao_instance._fill_from_dao(work_item.domain_object, state)
 
             # After processing all, remove from in_progress
             state.in_progress.clear()
 
         return state.get(self)
 
-    def _fill_from_dao(self, result: T, state: FromDAOState) -> T:
+    def _fill_from_dao(self, domain_object: T, state: FromDataAccessObjectState) -> T:
         """
         Actually fill the domain object with data from this DAO.
         """
         mapper: sqlalchemy.orm.Mapper = sqlalchemy.inspection.inspect(type(self))
 
         argument_names = self._argument_names()
-        kwargs = self._collect_scalar_kwargs(mapper, argument_names)
-
-        rel_kwargs, circular_refs = self._collect_relationship_kwargs(
-            mapper, argument_names, state
-        )
-        kwargs.update(rel_kwargs)
-
-        base_kwargs = self._build_base_kwargs_for_alternative_parent(
-            argument_names, state
+        scalar_keyword_arguments = self._collect_scalar_keyword_arguments(
+            mapper, argument_names
         )
 
-        init_args = {**base_kwargs, **kwargs}
-        self._call_initializer_or_assign(result, init_args)
+        relationship_keyword_arguments, circular_references = (
+            self._collect_relationship_keyword_arguments(mapper, argument_names, state)
+        )
+        keyword_arguments = {
+            **scalar_keyword_arguments,
+            **relationship_keyword_arguments,
+        }
+
+        base_keyword_arguments = (
+            self._build_base_keyword_arguments_for_alternative_parent(
+                argument_names, state
+            )
+        )
+
+        init_arguments = {**base_keyword_arguments, **keyword_arguments}
+        self._call_initializer_or_assign(domain_object, init_arguments)
 
         # After __init__, populate remaining relationships that were not in argument_names
-        all_relationship_keys = {rel.key for rel in mapper.relationships}
-        remaining_rel_keys = all_relationship_keys - set(argument_names)
+        self._populate_remaining_relationships(
+            domain_object, mapper, argument_names, state
+        )
 
-        for relationship in mapper.relationships:
-            if relationship.key not in remaining_rel_keys:
-                continue
+        state.apply_circular_fixes(domain_object, circular_references)
 
-            value = getattr(self, relationship.key)
-            if relationship.direction == MANYTOONE or (
-                relationship.direction == ONETOMANY and not relationship.uselist
-            ):
-                if value is None:
-                    setattr(result, relationship.key, None)
-                    continue
-
-                if state.has(value):
-                    setattr(result, relationship.key, state.get(value))
-                else:
-                    parsed = value._allocate_uninitialized_and_memoize(state)
-                    state.add_to_queue(value, parsed)
-                    setattr(result, relationship.key, parsed)
-            elif relationship.direction in (ONETOMANY, MANYTOMANY):
-                if not value:
-                    setattr(result, relationship.key, value)
-                    continue
-
-                instances = []
-                for v in value:
-                    if state.has(v):
-                        instances.append(state.get(v))
-                    else:
-                        instance = v._allocate_uninitialized_and_memoize(state)
-                        state.add_to_queue(v, instance)
-                        instances.append(instance)
-                setattr(result, relationship.key, type(value)(instances))
-
-        self._apply_circular_fixes(result, circular_refs, state)
-
-        if isinstance(result, AlternativeMapping):
-            final_result = result.create_from_dao()
+        if isinstance(domain_object, AlternativeMapping):
+            final_result = domain_object.create_from_dao()
             # Update memo if AlternativeMapping changed the instance
             state.memo[id(self)] = final_result
             return final_result
 
-        return result
+        return domain_object
 
-    def _allocate_uninitialized_and_memoize(self, state: FromDAOState) -> Any:
+    def _populate_remaining_relationships(
+        self,
+        domain_object: T,
+        mapper: sqlalchemy.orm.Mapper,
+        argument_names: List[str],
+        state: FromDataAccessObjectState,
+    ) -> None:
+        """
+        Populate relationships that were not provided to the constructor.
+        """
+        all_relationship_keys = {rel.key for rel in mapper.relationships}
+        remaining_relationship_keys = all_relationship_keys - set(argument_names)
+
+        for relationship in mapper.relationships:
+            if relationship.key not in remaining_relationship_keys:
+                continue
+
+            value = getattr(self, relationship.key)
+            is_single = relationship.direction == MANYTOONE or (
+                relationship.direction == ONETOMANY and not relationship.uselist
+            )
+
+            if is_single:
+                if value is None:
+                    setattr(domain_object, relationship.key, None)
+                    continue
+                instance = self._get_or_allocate_domain_object(value, state)
+                setattr(domain_object, relationship.key, instance)
+            elif relationship.direction in (ONETOMANY, MANYTOMANY):
+                if not value:
+                    setattr(domain_object, relationship.key, value)
+                    continue
+                instances = [
+                    self._get_or_allocate_domain_object(v, state) for v in value
+                ]
+                setattr(domain_object, relationship.key, type(value)(instances))
+
+    def _get_or_allocate_domain_object(
+        self, dao_instance: DataAccessObject, state: FromDataAccessObjectState
+    ) -> Any:
+        """
+        Ensure a domain object exists for the given DAO and queue it for processing if new.
+        """
+        if state.has(dao_instance):
+            return state.get(dao_instance)
+
+        instance = dao_instance._allocate_uninitialized_and_memoize(state)
+        state.add_to_queue(dao_instance, instance)
+        return instance
+
+    def _allocate_uninitialized_and_memoize(
+        self, state: FromDataAccessObjectState
+    ) -> Any:
         """
         Allocate an uninitialized domain object and memoize immediately.
         """
@@ -795,75 +717,67 @@ class DataAccessObject(HasGeneric[T]):
         """
         init_of_original_class = self.original_class().__init__
         return [
-            p.name
-            for p in inspect.signature(init_of_original_class).parameters.values()
+            parameter.name
+            for parameter in inspect.signature(
+                init_of_original_class
+            ).parameters.values()
         ][1:]
 
-    def _collect_scalar_kwargs(
+    def _collect_scalar_keyword_arguments(
         self, mapper: sqlalchemy.orm.Mapper, argument_names: List[str]
     ) -> Dict[str, Any]:
         """
         :return: keyword arguments for scalar columns present in the constructor.
         """
-        kwargs: Dict[str, Any] = {}
+        keyword_arguments: Dict[str, Any] = {}
         for column in mapper.columns:
             if column.name in argument_names and is_data_column(column):
-                kwargs[column.name] = getattr(self, column.name)
-        return kwargs
+                keyword_arguments[column.name] = getattr(self, column.name)
+        return keyword_arguments
 
-    def _collect_relationship_kwargs(
+    def _collect_relationship_keyword_arguments(
         self,
         mapper: sqlalchemy.orm.Mapper,
         argument_names: List[str],
-        state: FromDAOState,
+        state: FromDataAccessObjectState,
     ) -> tuple[Dict[str, Any], Dict[str, Any]]:
         """
         Collect relationship constructor arguments and capture circular references.
-
-        :param mapper: SQLAlchemy mapper object
-        :param argument_names: Names of arguments
-        :param state: The conversion state.
-        :return: A tuple of (relationship_kwargs, circular_references_map).
         """
-        rel_kwargs: Dict[str, Any] = {}
-        circular_refs: Dict[str, Any] = {}
+        relationship_keyword_arguments: Dict[str, Any] = {}
+        circular_references: Dict[str, Any] = {}
+
         for relationship in mapper.relationships:
             if relationship.key not in argument_names:
                 continue
+
             value = getattr(self, relationship.key)
-            if relationship.direction == MANYTOONE or (
+            is_single = relationship.direction == MANYTOONE or (
                 relationship.direction == ONETOMANY and not relationship.uselist
-            ):
+            )
+
+            if is_single:
                 if value is None:
-                    rel_kwargs[relationship.key] = None
+                    relationship_keyword_arguments[relationship.key] = None
                     continue
 
                 if state.has(value):
                     parsed = state.get(value)
-                    # Use a sentinel to detect if the object is still being built
-                    # so we can fix it later if needed, but for now we use the allocated instance.
-                    is_circular = id(value) in state.in_progress
-                    if is_circular:
-                        circular_refs[relationship.key] = value
-                    rel_kwargs[relationship.key] = parsed
+                    if id(value) in state.in_progress:
+                        circular_references[relationship.key] = value
+                    relationship_keyword_arguments[relationship.key] = parsed
                 else:
-                    # Check if it's an AlternativeMapping
-                    original_cls = value.original_class()
-                    if issubclass(original_cls, AlternativeMapping):
+                    original_clazz = value.original_class()
+                    if issubclass(original_clazz, AlternativeMapping):
                         parsed = value.from_dao(state=state)
                     else:
-                        # Allocate and queue
                         parsed = value._allocate_uninitialized_and_memoize(state)
                         state.add_to_queue(value, parsed)
-                        # We also mark it as circular if it's new and being queued,
-                        # so that it gets fixed AFTER population if needed.
-                        # This is because it might not have all its attributes set yet
-                        # (especially those set in __post_init__ or later in the queue).
-                        circular_refs[relationship.key] = value
-                    rel_kwargs[relationship.key] = parsed
+                        circular_references[relationship.key] = value
+                    relationship_keyword_arguments[relationship.key] = parsed
             elif relationship.direction in (ONETOMANY, MANYTOMANY):
                 if not value:
-                    rel_kwargs[relationship.key] = value
+                    relationship_keyword_arguments[relationship.key] = value
                     continue
 
                 instances = []
@@ -875,53 +789,55 @@ class DataAccessObject(HasGeneric[T]):
                             circular_values.append(v)
                         instances.append(instance)
                     else:
-                        original_cls = v.original_class()
-                        if issubclass(original_cls, AlternativeMapping):
+                        original_clazz = v.original_class()
+                        if issubclass(original_clazz, AlternativeMapping):
                             instance = v.from_dao(state=state)
                         else:
                             instance = v._allocate_uninitialized_and_memoize(state)
                             state.add_to_queue(v, instance)
-                            # Also mark as circular to be fixed later
                             circular_values.append(v)
                         instances.append(instance)
 
                 if circular_values:
-                    circular_refs[relationship.key] = circular_values
-                rel_kwargs[relationship.key] = type(value)(instances)
+                    circular_references[relationship.key] = circular_values
+                relationship_keyword_arguments[relationship.key] = type(value)(
+                    instances
+                )
             else:
                 raise UnsupportedRelationshipError(relationship)
-        return rel_kwargs, circular_refs
 
-    def _build_base_kwargs_for_alternative_parent(
+        return relationship_keyword_arguments, circular_references
+
+    def _build_base_keyword_arguments_for_alternative_parent(
         self,
         argument_names: List[str],
-        state: "FromDAOState",
+        state: FromDataAccessObjectState,
     ) -> Dict[str, Any]:
         """
-        Build a dictionary of base keyword arguments for an alternative parent DAO and mapping.
-
-        :param argument_names: Constructor argument names of the original class.
-        :param state: The conversion state.
-        :return: A dictionary of keyword arguments derived from the base DAO and mapping.
+        Build keyword arguments for an alternative parent.
         """
-        base = self.__class__.__bases__[0]
-        base_kwargs: Dict[str, Any] = {}
-        if self.uses_alternative_mapping(base):
-            parent_dao = base()
-            parent_mapper = sqlalchemy.inspection.inspect(base)
+        base_clazz = self.__class__.__bases__[0]
+        base_keyword_arguments: Dict[str, Any] = {}
+        if self.uses_alternative_mapping(base_clazz):
+            parent_dao = base_clazz()
+            parent_mapper = sqlalchemy.inspection.inspect(base_clazz)
             for column in parent_mapper.columns:
                 if is_data_column(column):
                     setattr(parent_dao, column.name, getattr(self, column.name))
-            for rel in parent_mapper.relationships:
-                setattr(parent_dao, rel.key, getattr(self, rel.key))
+            for relationship in parent_mapper.relationships:
+                setattr(parent_dao, relationship.key, getattr(self, relationship.key))
             base_result = parent_dao.from_dao(state=state)
             for argument in argument_names:
-                if argument not in base_kwargs and not hasattr(self, argument):
+                if argument not in base_keyword_arguments and not hasattr(
+                    self, argument
+                ):
                     try:
-                        base_kwargs[argument] = getattr(base_result, argument)
+                        base_keyword_arguments[argument] = getattr(
+                            base_result, argument
+                        )
                     except AttributeError:
-                        ...
-        return base_kwargs
+                        continue
+        return base_keyword_arguments
 
     @classmethod
     def _call_initializer_or_assign(
@@ -955,16 +871,16 @@ class DataAccessObject(HasGeneric[T]):
         try:
             mapper: sqlalchemy.orm.Mapper = sqlalchemy.inspection.inspect(type(self))
             # Compare only data columns, ignoring PK/FK/polymorphic columns
-            for column in mapper.columns:
-                if is_data_column(column):
-                    if getattr(self, column.name) != getattr(other, column.name):
-                        return False
-            return True
+            return all(
+                getattr(self, column.name) == getattr(other, column.name)
+                for column in mapper.columns
+                if is_data_column(column)
+            )
         except Exception:
             # Fallback to identity comparison if we cannot inspect
             return self is other
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         if not hasattr(_repr_thread_local, "seen"):
             _repr_thread_local.seen = set()
 
@@ -974,25 +890,18 @@ class DataAccessObject(HasGeneric[T]):
         _repr_thread_local.seen.add(id(self))
         try:
             mapper: sqlalchemy.orm.Mapper = sqlalchemy.inspection.inspect(type(self))
-            kwargs = []
+            representations = []
+
             for column in mapper.columns:
-                value = getattr(self, column.name)
                 if is_data_column(column):
-                    kwargs.append(f"{column.name}={repr(value)}")
+                    value = getattr(self, column.name)
+                    representations.append(f"{column.name}={repr(value)}")
 
             for relationship in mapper.relationships:
                 value = getattr(self, relationship.key)
-                if value is not None:
-                    if isinstance(value, list):
-                        kwargs.append(
-                            f"{relationship.key}=[{', '.join(repr(v) for v in value)}]"
-                        )
-                    else:
-                        kwargs.append(f"{relationship.key}={repr(value)}")
-                else:
-                    kwargs.append(f"{relationship.key}=None")
+                representations.append(f"{relationship.key}={repr(value)}")
 
-            return f"{self.__class__.__name__}({', '.join(kwargs)})"
+            return f"{self.__class__.__name__}({', '.join(representations)})"
         finally:
             _repr_thread_local.seen.remove(id(self))
 
@@ -1000,22 +909,19 @@ class DataAccessObject(HasGeneric[T]):
 class AlternativeMapping(HasGeneric[T], abc.ABC):
 
     @classmethod
-    def to_dao(cls, obj: T, state: Optional[ToDAOState] = None) -> _DAO:
+    def to_dao(
+        cls, source_object: T, state: Optional[ToDataAccessObjectState] = None
+    ) -> _DAO:
         """
-        Create a DAO from the obj if it doesn't exist.
-
-        :param obj: The obj to create the DAO from.
-        :param state: The state to use for the conversion.
-
-        :return: An instance of this class created from the obj.
+        Create a DAO from the source_object if it doesn't exist.
         """
-        state = state or ToDAOState()
-        if id(obj) in state.memo:
-            return state.memo[id(obj)]
-        elif isinstance(obj, cls):
-            return obj
+        state = state or ToDataAccessObjectState()
+        if id(source_object) in state.memo:
+            return state.memo[id(source_object)]
+        elif isinstance(source_object, cls):
+            return source_object
         else:
-            result = cls.create_instance(obj)
+            result = cls.create_instance(source_object)
             return result
 
     @classmethod
@@ -1044,33 +950,56 @@ class AlternativeMapping(HasGeneric[T], abc.ABC):
 
 
 @lru_cache(maxsize=None)
-def get_dao_class(cls: Type) -> Optional[Type[DataAccessObject]]:
-    if get_alternative_mapping(cls) is not None:
-        cls = get_alternative_mapping(cls)
-    for dao in recursive_subclasses(DataAccessObject):
-        if dao.original_class() == cls:
-            return dao
+def _get_clazz_by_original_clazz(
+    base_clazz: Type, original_clazz: Type
+) -> Optional[Type]:
+    """
+    Find a subclass of base_clazz that maps to original_clazz.
+    """
+    for subclass in recursive_subclasses(base_clazz):
+        try:
+            if subclass.original_class() == original_clazz:
+                return subclass
+        except (AttributeError, TypeError, NoGenericError):
+            continue
     return None
 
 
 @lru_cache(maxsize=None)
-def get_alternative_mapping(cls: Type) -> Optional[Type[DataAccessObject]]:
-    for alt_mapping in recursive_subclasses(AlternativeMapping):
-        if alt_mapping.original_class() == cls:
-            return alt_mapping
-    return None
+def get_dao_class(original_clazz: Type) -> Optional[Type[DataAccessObject]]:
+    """
+    Find the DAO class for the given original class.
+    """
+    alternative_mapping = get_alternative_mapping(original_clazz)
+    if alternative_mapping is not None:
+        original_clazz = alternative_mapping
+
+    return _get_clazz_by_original_clazz(DataAccessObject, original_clazz)
 
 
-def to_dao(obj: Any, state: Optional[ToDAOState] = None) -> DataAccessObject:
+@lru_cache(maxsize=None)
+def get_alternative_mapping(
+    original_clazz: Type,
+) -> Optional[Type[AlternativeMapping]]:
+    """
+    Find the alternative mapping for the given original class.
+    """
+    return _get_clazz_by_original_clazz(AlternativeMapping, original_clazz)
+
+
+def to_dao(
+    source_object: Any, state: Optional[ToDataAccessObjectState] = None
+) -> DataAccessObject:
     """
     Convert any object to a dao class.
-
-    :param obj: The object to convert to a dao.
-    :param state: The state to use for the conversion.
-    :return: The DAO version of `obj`.
     """
-    dao_class = get_dao_class(type(obj))
-    if dao_class is None:
-        raise NoDAOFoundError(obj)
-    state = state or ToDAOState()
-    return dao_class.to_dao(obj, state)
+    dao_clazz = get_dao_class(type(source_object))
+    if dao_clazz is None:
+        raise NoDAOFoundError(source_object)
+    state = state or ToDataAccessObjectState()
+    return dao_clazz.to_dao(source_object, state)
+
+
+# Compatibility aliases for backward compatibility and to avoid breaking existing tests.
+ToDAOState = ToDataAccessObjectState
+FromDAOState = FromDataAccessObjectState
