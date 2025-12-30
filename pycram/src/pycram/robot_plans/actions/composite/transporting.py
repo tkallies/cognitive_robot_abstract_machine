@@ -5,6 +5,7 @@ from datetime import timedelta
 from typing import List
 
 import numpy as np
+
 from semantic_digital_twin.reasoning.predicates import InsideOf
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Drawer
 from semantic_digital_twin.world_description.world_entity import Body
@@ -87,11 +88,16 @@ class TransportAction(ActionDescription):
                         OpenActionDescription(sem_anno[0].handle.body, self.arm),
                     ).perform()
         SequentialPlan(self.context, ParkArmsActionDescription(Arms.BOTH)).perform()
-        pickup_loc = GiskardLocation(
-            target_pose=PoseStamped.from_spatial_type(
-                self.object_designator.global_pose
-            ),
-            arm=self.arm,
+        # pickup_loc = GiskardLocation(
+        #     target_pose=PoseStamped.from_spatial_type(
+        #         self.object_designator.global_pose
+        #     ),
+        #     arm=self.arm,
+        # )
+        pickup_loc = CostmapLocation(
+            target=PoseStamped.from_spatial_type(self.object_designator.global_pose),
+            reachable_arm=self.arm,
+            reachable_for=self.robot_view,
         )
         pickup_loc.plan_node = self.plan_node
         # Tries to find a pick-up position for the robot that uses the given arm
@@ -111,10 +117,15 @@ class TransportAction(ActionDescription):
             ),
             ParkArmsActionDescription(Arms.BOTH),
             NavigateActionDescription(
-                GiskardLocation(
-                    target_pose=self.target_location,
-                    arm=self.arm,
-                    grasp_description=pickup_loc.grasp_description,
+                # GiskardLocation(
+                #     target_pose=self.target_location,
+                #     arm=self.arm,
+                #     grasp_description=pickup_loc.grasp_description,
+                # ),
+                CostmapLocation(
+                    target=self.target_location,
+                    reachable_arm=self.arm,
+                    reachable_for=self.robot_view,
                 ),
                 True,
             ),
