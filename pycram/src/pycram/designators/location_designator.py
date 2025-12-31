@@ -1646,31 +1646,92 @@ class GiskardLocation(LocationDesignatorDescription):
         """
         return next(iter(self))
 
+    def setup_costmap(self, pose: PoseStamped) -> Costmap:
+        """
+        Setup the reachability costmap for initial pose estimation.
+        """
+        ground_pose = deepcopy(pose)
+        ground_pose.position.z = 0.0
+        occupancy_map = OccupancyCostmap(
+            resolution=0.02,
+            height=200,
+            width=200,
+            world=self.world,
+            robot_view=self.robot_view,
+            origin=ground_pose,
+            distance_to_obstacle=0.3,
+        )
+        gaussian_map = GaussianCostmap(
+            resolution=0.02,
+            origin=ground_pose,
+            mean=200,
+            sigma=15,
+            world=self.world,
+        )
+
+        reachability_map = occupancy_map + gaussian_map
+        reachability_map.number_of_samples = 10
+
+        return reachability_map
+
+    def setup_giskard_executor(
+        self,
+        pose_sequence: List[PoseStamped],
+        world: World,
+        robot_view: AbstractRobot,
+        end_effector: Body,
+    ) -> Executor:
+        """
+        Setup the Giskard executor for a specific pose sequence and a given world.
+
+        :param pose_sequence: The pose sequence which the end_effector should follow
+        :param world: The world in which the pose sequence should be executed
+        :param robot_view: The robot view of the robot which should be used for the execution, needs to fit the world
+        :param end_effector: The end effector which should be controlled by Giskard
+        :return: The Giskard executor for the pose sequence
+        """
+        # Temp workaround until we fix multiple formats
+        giskard_coll_request = CollisionRequest(
+            body_group1=robot_view.bodies_with_collisions,
+            body_group2=list(
+                set(world.bodies_with_enabled_collision)
+                - set(robot_view.bodies_with_collisions)
+            ),
+            distance=0.1,
+        )
+
+        pose_seq = Sequence(
+            nodes=[
+                CartesianPose(
+                    root_link=world.root,
+                    tip_link=end_effector,
+                    goal_pose=pose.to_spatial_type(),
+                )
+                for pose in pose_sequence
+            ]
+        )
+
+        collision_avoidance = CollisionAvoidance(
+            collision_entries=[giskard_coll_request]
+        )
+        msc = MotionStatechart()
+        msc.add_nodes([pose_seq, collision_avoidance])
+
+        executor = Executor(
+            world,
+            controller_config=QPControllerConfig(
+                target_frequency=50, prediction_horizon=4, verbose=False
+            ),
+        )
+        executor.compile(msc)
+
+        return executor
+
     def __iter__(self) -> Iterator[GraspPose]:
 
         for params in self.generate_permutations():
 
-            ground_pose = deepcopy(params["target_pose"])
-            ground_pose.position.z = 0.0
-            occupancy_map = OccupancyCostmap(
-                resolution=0.02,
-                height=200,
-                width=200,
-                world=self.world,
-                robot_view=self.robot_view,
-                origin=ground_pose,
-                distance_to_obstacle=0.3,
-            )
-            gaussian_map = GaussianCostmap(
-                resolution=0.02,
-                origin=ground_pose,
-                mean=200,
-                sigma=15,
-                world=self.world,
-            )
-
-            reachability_map = occupancy_map + gaussian_map
-            reachability_map.number_of_samples = 10
+            reachability_map = self.setup_costmap(params["target_pose"])
 
             ee = ViewManager.get_arm_view(self.arm, self.robot_view)
 
@@ -1681,16 +1742,6 @@ class GiskardLocation(LocationDesignatorDescription):
                 hash(ee.manipulator.tool_frame)
             )
             test_robot.setup_collision_config()
-
-            # Temp workaround until we fix multiple formats
-            giskard_coll_request = CollisionRequest(
-                body_group1=test_robot.bodies_with_collisions,
-                body_group2=list(
-                    set(test_world.bodies_with_enabled_collision)
-                    - set(test_robot.bodies_with_collisions)
-                ),
-                distance=0.1,
-            )
 
             for candidate in reachability_map:
 
@@ -1717,30 +1768,11 @@ class GiskardLocation(LocationDesignatorDescription):
                     test_robot.root.parent_connection.origin = (
                         candidate.to_spatial_type()
                     )
-                    pose_seq = Sequence(
-                        nodes=[
-                            CartesianPose(
-                                root_link=test_world.root,
-                                tip_link=test_ee,
-                                goal_pose=pose.to_spatial_type(),
-                            )
-                            for pose in target_sequence
-                        ]
+
+                    executor = self.setup_giskard_executor(
+                        target_sequence, test_world, test_robot, test_ee
                     )
 
-                    collision_avoidance = CollisionAvoidance(
-                        collision_entries=[giskard_coll_request]
-                    )
-                    msc = MotionStatechart()
-                    msc.add_nodes([pose_seq, collision_avoidance])
-
-                    executor = Executor(
-                        test_world,
-                        controller_config=QPControllerConfig(
-                            target_frequency=50, prediction_horizon=4, verbose=False
-                        ),
-                    )
-                    executor.compile(msc)
                     try:
                         executor.tick_until_end()
                     except TimeoutError as e:

@@ -71,13 +71,6 @@ The structure of fixtures in this conftest:
 
 """
 
-#
-# def pytest_configure(conf):
-#     logging.getLogger("pycram").setLevel(logging.DEBUG)
-#     logging.getLogger("giskardpy").setLevel(logging.DEBUG)
-#     logging.getLogger("krrood").setLevel(logging.DEBUG)
-#     logging.getLogger("semantic_digital_twin").setLevel(logging.DEBUG)
-
 
 @pytest.fixture(autouse=True, scope="function")
 def cleanup_after_test():
@@ -165,7 +158,7 @@ def hsr_world_setup():
     return world_with_hsr
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def tracy_world():
     if not tracy_installed():
         pytest.skip("Tracy not installed")

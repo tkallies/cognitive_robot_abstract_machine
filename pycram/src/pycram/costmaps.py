@@ -38,11 +38,17 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-np_x_axis = 0
-np_y_axis = 1
 
 """
-Define the axis of the numpy array and how they relate to the spatial axes 
+Costmaps represent the 2D distribution in a numpy array where axis 0 is the X-Axis of the coordinate system and axis 1 
+is the Y-Axis of the coordinate system. An increase in the index of the axis of the numpy array corresponds to an increase in the 
+value of the spatial axis. The factor by how the value of the index of the numpy corresponds to the spatial coordinate 
+system is given by the resolution. 
+ 
+Furthermore, there is a difference in the origin of the two representations while the numpy arrays start from the top left 
+corner, the origin given as PoseStamped is placed in the middle of the array. The costmap is build around the origin and 
+since the array start from 0, 0 in the corner this conversion is necessary. 
+
             y-axis      0, 10
     0,0 ------------------
         ------------------
