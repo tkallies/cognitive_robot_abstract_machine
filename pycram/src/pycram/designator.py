@@ -68,7 +68,7 @@ class ResolutionError(Exception):
 
 
 @dataclass
-class DesignatorDescription(ABC):
+class DesignatorDescription:
 
     plan_node: PlanNode = field(init=False, default=None)
     """

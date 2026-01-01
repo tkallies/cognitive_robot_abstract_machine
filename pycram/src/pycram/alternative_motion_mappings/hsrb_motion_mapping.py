@@ -1,3 +1,5 @@
+from nav2_msgs.action import NavigateToPose
+
 from giskardpy.motion_statechart.tasks.ros_tasks import (
     ActionServerTask,
     NavigateActionServerTask,
@@ -22,19 +24,5 @@ class HSRBMoveMotion(MoveMotion, AlternativeMotion[HSRB]):
             base_link=self.robot_view.root,
             action_topic="/hsrb/move_base",
             node_handle=self.plan.context.ros_node,
-        )
-
-
-class HSRBMoveGripper(MoveGripperMotion, AlternativeMotion[HSRB]):
-    execution_type = ExecutionType.REAL
-
-    def perform(self):
-        return
-
-    @property
-    def _motion_chart(self) -> ActionServerTask:
-        return ActionServerTask(
-            action_topic="/hsrb/gripper",  # Adapt to real topic
-            goal_msg=None,  # Replace with actual goal message for HSR gripper
-            node_handle=self.plan.context.ros_node,
+            message_type=NavigateToPose,
         )
