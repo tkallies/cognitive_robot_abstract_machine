@@ -271,11 +271,11 @@ class AngleGoal(FeatureFunctionGoal):
 
     root_link: KinematicStructureEntity = field(kw_only=True)
     """
-    root link of the kinematic chain.
+    Root link of the kinematic chain.
     """
     tip_link: KinematicStructureEntity = field(kw_only=True)
     """
-    tip link of the kinematic chain.
+    Tip link of the kinematic chain.
     """
     tip_vector: Vector3 = field(kw_only=True)
     """
