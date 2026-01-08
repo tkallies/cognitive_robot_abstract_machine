@@ -1,0 +1,12 @@
+random-events>=4.1.2
+networkx
+plotly
+scipy
+typing_extensions
+numpy
+sortedcontainers
+tqdm
+tabulate
+N2G
+python-igraph
+rustworkx>=0.16.0
