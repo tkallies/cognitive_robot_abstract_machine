@@ -96,6 +96,7 @@ def synchronized_attribute_modification(func):
             )
         )
         return result
+
     return wrapper
 
 
