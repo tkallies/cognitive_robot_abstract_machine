@@ -594,46 +594,6 @@ class HasDoors(HasRootKinematicStructureEntity, ABC):
 
 
 @dataclass(eq=False)
-class HasLeftRightDoor(HasDoors):
-    """
-    A mixin class for semantic annotations that have a left and a right door.
-    """
-
-    left_door: Optional[Door] = None
-    """
-    The left door of the semantic annotation.
-    """
-    right_door: Optional[Door] = None
-    """
-    The right door of the semantic annotation.
-    """
-
-    def add_right_door(
-        self,
-        door: Door,
-    ):
-        """
-        Add a right door to the semantic annotation.
-
-        :param door: The door to add.
-        """
-        self.add_door(door)
-        self.right_door = door
-
-    def add_left_door(
-        self,
-        door: Door,
-    ):
-        """
-        Add a left door to the semantic annotation.
-
-        :param door: The door to add.
-        """
-        self.add_door(door)
-        self.left_door = door
-
-
-@dataclass(eq=False)
 class HasHandle(HasRootBody, ABC):
     """
     A mixin class for semantic annotations that have a handle.

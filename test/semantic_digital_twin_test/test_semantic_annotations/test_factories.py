@@ -19,7 +19,6 @@ from semantic_digital_twin.exceptions import (
 )
 from semantic_digital_twin.semantic_annotations.mixins import (
     HasCaseAsRootBody,
-    HasLeftRightDoor,
 )
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Handle,
@@ -28,6 +27,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Wall,
     Hinge,
     Fridge,
+    DoubleDoor,
     Slider,
     Floor,
     Aperture,
@@ -534,38 +534,6 @@ class TestFactories(unittest.TestCase):
             self.assertEqual(p.reference_frame, table.root)
             self.assertAlmostEqual(float(p.z), 0.05 + 0.01)
 
-    def test_has_left_right_door(self):
-        @dataclass(eq=False)
-        class DummyDoubleDoor(HasLeftRightDoor):
-            pass
-
-        world = World()
-        root = Body(name=PrefixedName("root"))
-        with world.modify_world():
-            world.add_body(root)
-        double_door = DummyDoubleDoor(
-            name=PrefixedName("double_door"),
-            root=Body(name=PrefixedName("double_door_body")),
-        )
-        with world.modify_world():
-            world.add_body(double_door.root)
-            world.add_semantic_annotation(double_door)
-            world.add_connection(FixedConnection(root, double_door.root))
-            left_door = Door.create_with_new_body_in_world(
-                name=PrefixedName("left"), world=world
-            )
-            right_door = Door.create_with_new_body_in_world(
-                name=PrefixedName("right"), world=world
-            )
-
-            double_door.add_left_door(left_door)
-            double_door.add_right_door(right_door)
-
-        self.assertEqual(double_door.left_door, left_door)
-        self.assertEqual(double_door.right_door, right_door)
-        self.assertIn(left_door, double_door.doors)
-        self.assertIn(right_door, double_door.doors)
-
     def test_floor_polytope(self):
         world = World()
         root = Body(name=PrefixedName("root"))
@@ -735,7 +703,7 @@ class TestFactories(unittest.TestCase):
         cup.class_label = "plastic_cup"
         self.assertEqual(cup.class_label, "plastic_cup")
 
-    def test_has_objects(self):
+    def test_has_storage_space(self):
         world = World()
         root = Body(name=PrefixedName("root"))
         with world.modify_world():
@@ -773,6 +741,53 @@ class TestFactories(unittest.TestCase):
 
         with self.assertRaises(MismatchingWorld):
             cabinet.add_object(cup)
+
+    def test_double_door_view_point(self):
+        world = World()
+        root = Body(name=PrefixedName("root"))
+        with world.modify_world():
+            world.add_body(root)
+        with world.modify_world():
+            door_left = Door.create_with_new_body_in_world(
+                name=PrefixedName("door_left"),
+                world=world,
+                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=1, y=0.5
+                ),
+            )
+            door_right = Door.create_with_new_body_in_world(
+                name=PrefixedName("door_right"),
+                world=world,
+                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=1, y=-0.5
+                ),
+            )
+            double_door = DoubleDoor(
+                door_0=door_left, door_1=door_right, name=PrefixedName("double_door")
+            )
+            world.add_semantic_annotation(double_door)
+
+        # View point at origin looking forward (identity)
+        view_point_front = HomogeneousTransformationMatrix.from_xyz_rpy()
+        self.assertEqual(
+            double_door.calculate_leftmost_door_from_view_point(view_point_front),
+            door_left,
+        )
+        self.assertEqual(
+            double_door.calculate_rightmost_door_from_view_point(view_point_front),
+            door_right,
+        )
+
+        # View point at x=2 looking back (180 deg around Z)
+        view_point_back = HomogeneousTransformationMatrix.from_xyz_rpy(x=2, yaw=np.pi)
+        self.assertEqual(
+            double_door.calculate_leftmost_door_from_view_point(view_point_back),
+            door_right,
+        )
+        self.assertEqual(
+            double_door.calculate_rightmost_door_from_view_point(view_point_back),
+            door_left,
+        )
 
 
 if __name__ == "__main__":

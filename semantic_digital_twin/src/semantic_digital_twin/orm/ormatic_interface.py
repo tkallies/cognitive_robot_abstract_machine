@@ -104,19 +104,19 @@ hasdrawersdao_drawers_association = Table(
     Column("source_hasdrawersdao_id", ForeignKey("HasDrawersDAO.database_id")),
     Column("target_drawerdao_id", ForeignKey("DrawerDAO.database_id")),
 )
-canstoreobjectsdao_objects_association = Table(
-    "canstoreobjectsdao_objects_association",
-    Base.metadata,
-    Column(
-        "source_canstoreobjectsdao_id", ForeignKey("CanStoreObjectsDAO.database_id")
-    ),
-    Column("target_hasrootbodydao_id", ForeignKey("HasRootBodyDAO.database_id")),
-)
 hasaperturesdao_apertures_association = Table(
     "hasaperturesdao_apertures_association",
     Base.metadata,
     Column("source_hasaperturesdao_id", ForeignKey("HasAperturesDAO.database_id")),
     Column("target_aperturedao_id", ForeignKey("ApertureDAO.database_id")),
+)
+hasstoragespacedao_objects_association = Table(
+    "hasstoragespacedao_objects_association",
+    Base.metadata,
+    Column(
+        "source_hasstoragespacedao_id", ForeignKey("HasStorageSpaceDAO.database_id")
+    ),
+    Column("target_hasrootbodydao_id", ForeignKey("HasRootBodyDAO.database_id")),
 )
 cabinetdao_objects_association = Table(
     "cabinetdao_objects_association",
@@ -1986,22 +1986,22 @@ class DoubleDoorDAO(
         use_existing_column=True,
     )
 
-    left_door_id: Mapped[int] = mapped_column(
+    door_0_id: Mapped[int] = mapped_column(
         ForeignKey("DoorDAO.database_id", use_alter=True),
         nullable=True,
         use_existing_column=True,
     )
-    right_door_id: Mapped[int] = mapped_column(
+    door_1_id: Mapped[int] = mapped_column(
         ForeignKey("DoorDAO.database_id", use_alter=True),
         nullable=True,
         use_existing_column=True,
     )
 
-    left_door: Mapped[DoorDAO] = relationship(
-        "DoorDAO", uselist=False, foreign_keys=[left_door_id], post_update=True
+    door_0: Mapped[DoorDAO] = relationship(
+        "DoorDAO", uselist=False, foreign_keys=[door_0_id], post_update=True
     )
-    right_door: Mapped[DoorDAO] = relationship(
-        "DoorDAO", uselist=False, foreign_keys=[right_door_id], post_update=True
+    door_1: Mapped[DoorDAO] = relationship(
+        "DoorDAO", uselist=False, foreign_keys=[door_1_id], post_update=True
     )
 
     __mapper_args__ = {
@@ -2069,43 +2069,6 @@ class HasDoorsDAO(
         "polymorphic_identity": "HasDoorsDAO",
         "inherit_condition": database_id
         == HasRootKinematicStructureEntityDAO.database_id,
-    }
-
-
-class HasLeftRightDoorDAO(
-    HasDoorsDAO,
-    DataAccessObject[
-        semantic_digital_twin.semantic_annotations.mixins.HasLeftRightDoor
-    ],
-):
-
-    __tablename__ = "HasLeftRightDoorDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(HasDoorsDAO.database_id), primary_key=True, use_existing_column=True
-    )
-
-    left_door_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
-        ForeignKey("DoorDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-    right_door_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
-        ForeignKey("DoorDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    left_door: Mapped[DoorDAO] = relationship(
-        "DoorDAO", uselist=False, foreign_keys=[left_door_id], post_update=True
-    )
-    right_door: Mapped[DoorDAO] = relationship(
-        "DoorDAO", uselist=False, foreign_keys=[right_door_id], post_update=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "HasLeftRightDoorDAO",
-        "inherit_condition": database_id == HasDoorsDAO.database_id,
     }
 
 
@@ -2305,33 +2268,6 @@ class WineBottleDAO(
     __mapper_args__ = {
         "polymorphic_identity": "WineBottleDAO",
         "inherit_condition": database_id == BottleDAO.database_id,
-    }
-
-
-class CanStoreObjectsDAO(
-    HasRootBodyDAO,
-    DataAccessObject[semantic_digital_twin.semantic_annotations.mixins.HasStorageSpace],
-):
-
-    __tablename__ = "CanStoreObjectsDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(HasRootBodyDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    objects: Mapped[typing.List[HasRootBodyDAO]] = relationship(
-        "HasRootBodyDAO",
-        secondary="canstoreobjectsdao_objects_association",
-        primaryjoin="CanStoreObjectsDAO.database_id == canstoreobjectsdao_objects_association.c.source_canstoreobjectsdao_id",
-        secondaryjoin="HasRootBodyDAO.database_id == canstoreobjectsdao_objects_association.c.target_hasrootbodydao_id",
-        cascade="save-update, merge",
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "CanStoreObjectsDAO",
-        "inherit_condition": database_id == HasRootBodyDAO.database_id,
     }
 
 
@@ -3211,6 +3147,33 @@ class DoorDAO(
     __mapper_args__ = {
         "polymorphic_identity": "DoorDAO",
         "inherit_condition": database_id == HasHandleDAO.database_id,
+    }
+
+
+class HasStorageSpaceDAO(
+    HasRootBodyDAO,
+    DataAccessObject[semantic_digital_twin.semantic_annotations.mixins.HasStorageSpace],
+):
+
+    __tablename__ = "HasStorageSpaceDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(HasRootBodyDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    objects: Mapped[typing.List[HasRootBodyDAO]] = relationship(
+        "HasRootBodyDAO",
+        secondary="hasstoragespacedao_objects_association",
+        primaryjoin="HasStorageSpaceDAO.database_id == hasstoragespacedao_objects_association.c.source_hasstoragespacedao_id",
+        secondaryjoin="HasRootBodyDAO.database_id == hasstoragespacedao_objects_association.c.target_hasrootbodydao_id",
+        cascade="save-update, merge",
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "HasStorageSpaceDAO",
+        "inherit_condition": database_id == HasRootBodyDAO.database_id,
     }
 
 

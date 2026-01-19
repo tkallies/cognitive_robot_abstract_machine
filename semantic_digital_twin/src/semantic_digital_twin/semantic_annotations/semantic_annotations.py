@@ -299,8 +299,39 @@ class DoubleDoor(SemanticAnnotation):
     A semantic annotation that represents a double door with left and right doors.
     """
 
-    left_door: Door = field(kw_only=True)
-    right_door: Door = field(kw_only=True)
+    door_0: Door = field(kw_only=True)
+    door_1: Door = field(kw_only=True)
+
+    def calculate_leftmost_door_from_view_point(
+        self, world_T_view_point: HomogeneousTransformationMatrix
+    ) -> Optional[Door]:
+        """
+        Calculate and return the leftmost door from a given view point, described in the world frame.
+        """
+
+        return max(
+            [self.door_0, self.door_1],
+            key=lambda door: self._get_y_in_view(door, world_T_view_point),
+        )
+
+    def calculate_rightmost_door_from_view_point(
+        self, world_T_view_point: HomogeneousTransformationMatrix
+    ) -> Optional[Door]:
+        """
+        Calculate and return the rightmost door from a given view point, described in the world frame.
+        """
+
+        return min(
+            [self.door_0, self.door_1],
+            key=lambda door: self._get_y_in_view(door, world_T_view_point),
+        )
+
+    def _get_y_in_view(
+        self, door: Door, world_T_view_point: HomogeneousTransformationMatrix
+    ) -> float:
+        world_T_door = door.root.global_pose
+        view_point_T_door = world_T_view_point.inverse() @ world_T_door
+        return float(view_point_T_door.to_position().to_np()[1])
 
 
 @dataclass(eq=False)
