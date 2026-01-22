@@ -1,15 +1,11 @@
-import pytest
-from geometry_msgs.msg import (
-    TransformStamped,
-    PointStamped,
-    QuaternionStamped,
-    Vector3Stamped,
-    PoseStamped,
-)
+import geometry_msgs.msg as geometry_msgs
 
 from semantic_digital_twin.adapters.ros.msg_converter import (
-    ROS2MessageConverter,
-    CannotConvertFromRos2Error,
+    Ros2ToSemDTConverter,
+    SemDTToRos2Converter,
+)
+from semantic_digital_twin.adapters.ros.semdt_to_ros2_converters import (
+    PoseToRos2Converter,
 )
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
@@ -18,17 +14,24 @@ from semantic_digital_twin.spatial_types import (
     Quaternion,
 )
 from semantic_digital_twin.spatial_types.spatial_types import Pose
-from semantic_digital_twin.world_description.geometry import Box, Color, Scale
+from semantic_digital_twin.world_description.geometry import (
+    Box,
+    Color,
+    Scale,
+    Cylinder,
+    Sphere,
+    FileMesh,
+)
 
 
 def test_convert_transform(cylinder_bot_world):
-    transform = TransformStamped()
+    transform = geometry_msgs.TransformStamped()
     transform.header.frame_id = "map"
     transform.child_frame_id = "bot"
     transform.transform.translation.x = 1.0
     transform.transform.rotation.x = 1.0
     transform.transform.rotation.w = 0.0
-    transformation_matrix = ROS2MessageConverter.from_ros2_message(
+    transformation_matrix = Ros2ToSemDTConverter.convert(
         transform, world=cylinder_bot_world
     )
     position = transformation_matrix.to_position().evaluate()
@@ -48,18 +51,18 @@ def test_convert_transform(cylinder_bot_world):
         "map"
     )
 
-    transform2 = ROS2MessageConverter.to_ros2_message(transformation_matrix)
+    transform2 = SemDTToRos2Converter.convert(transformation_matrix)
     assert transform == transform2
 
 
 def test_convert_point_stamped(cylinder_bot_world):
-    point_msg = PointStamped()
+    point_msg = geometry_msgs.PointStamped()
     point_msg.header.frame_id = "map"
     point_msg.point.x = 1.0
     point_msg.point.y = 2.0
     point_msg.point.z = 3.0
 
-    point = ROS2MessageConverter.from_ros2_message(point_msg, world=cylinder_bot_world)
+    point = Ros2ToSemDTConverter.convert(point_msg, world=cylinder_bot_world)
     coords = point.evaluate()
 
     assert coords[0] == point_msg.point.x
@@ -68,19 +71,19 @@ def test_convert_point_stamped(cylinder_bot_world):
 
     assert point.reference_frame == cylinder_bot_world.get_body_by_name("map")
 
-    point_msg2 = ROS2MessageConverter.to_ros2_message(point)
+    point_msg2 = SemDTToRos2Converter.convert(point)
     assert point_msg == point_msg2
 
 
 def test_convert_quaternion(cylinder_bot_world):
-    quat_msg = QuaternionStamped()
+    quat_msg = geometry_msgs.QuaternionStamped()
     quat_msg.header.frame_id = "map"
     quat_msg.quaternion.x = 1.0
     quat_msg.quaternion.y = 0.0
     quat_msg.quaternion.z = 0.0
     quat_msg.quaternion.w = 0.0
 
-    quat = ROS2MessageConverter.from_ros2_message(quat_msg, world=cylinder_bot_world)
+    quat = Ros2ToSemDTConverter.convert(quat_msg, world=cylinder_bot_world)
     values = quat.evaluate()
 
     assert values[0] == quat_msg.quaternion.x
@@ -90,18 +93,18 @@ def test_convert_quaternion(cylinder_bot_world):
 
     assert quat.reference_frame == cylinder_bot_world.get_body_by_name("map")
 
-    quat_msg2 = ROS2MessageConverter.to_ros2_message(quat)
+    quat_msg2 = SemDTToRos2Converter.convert(quat)
     assert quat_msg == quat_msg2
 
 
 def test_convert_vector3(cylinder_bot_world):
-    vec_msg = Vector3Stamped()
+    vec_msg = geometry_msgs.Vector3Stamped()
     vec_msg.header.frame_id = "map"
     vec_msg.vector.x = -1.0
     vec_msg.vector.y = 0.5
     vec_msg.vector.z = 2.5
 
-    vec = ROS2MessageConverter.from_ros2_message(vec_msg, world=cylinder_bot_world)
+    vec = Ros2ToSemDTConverter.convert(vec_msg, world=cylinder_bot_world)
     values = vec.evaluate()
 
     assert values[0] == vec_msg.vector.x
@@ -110,12 +113,12 @@ def test_convert_vector3(cylinder_bot_world):
 
     assert vec.reference_frame == cylinder_bot_world.get_body_by_name("map")
 
-    vec_msg2 = ROS2MessageConverter.to_ros2_message(vec)
+    vec_msg2 = SemDTToRos2Converter.convert(vec)
     assert vec_msg == vec_msg2
 
 
 def test_convert_pose_stamped(cylinder_bot_world):
-    pose_msg = PoseStamped()
+    pose_msg = geometry_msgs.PoseStamped()
     pose_msg.header.frame_id = "map"
     pose_msg.pose.position.x = 1.2
     pose_msg.pose.position.y = -0.4
@@ -125,7 +128,7 @@ def test_convert_pose_stamped(cylinder_bot_world):
     pose_msg.pose.orientation.z = 0.0
     pose_msg.pose.orientation.w = 1.0
 
-    pose = ROS2MessageConverter.from_ros2_message(pose_msg, world=cylinder_bot_world)
+    pose = Ros2ToSemDTConverter.convert(pose_msg, world=cylinder_bot_world)
 
     pos = pose.to_position().evaluate()
     quat = pose.to_quaternion().evaluate()
@@ -141,33 +144,116 @@ def test_convert_pose_stamped(cylinder_bot_world):
 
     assert pose.reference_frame == cylinder_bot_world.get_body_by_name("map")
 
-    pose_msg2 = ROS2MessageConverter.to_ros2_message(pose)
+    pose_msg2 = SemDTToRos2Converter.convert(pose)
+    assert pose_msg == pose_msg2
+
+
+def test_convert_pose(cylinder_bot_world):
+    pose_msg = geometry_msgs.Pose()
+    pose_msg.position.x = 1.2
+    pose_msg.position.y = -0.4
+    pose_msg.position.z = 0.7
+    pose_msg.orientation.x = 0.0
+    pose_msg.orientation.y = 0.0
+    pose_msg.orientation.z = 0.0
+    pose_msg.orientation.w = 1.0
+
+    pose = Ros2ToSemDTConverter.convert(pose_msg, world=cylinder_bot_world)
+
+    pos = pose.to_position().evaluate()
+    quat = pose.to_quaternion().evaluate()
+
+    assert pos[0] == pose_msg.position.x
+    assert pos[1] == pose_msg.position.y
+    assert pos[2] == pose_msg.position.z
+
+    assert quat[0] == pose_msg.orientation.x
+    assert quat[1] == pose_msg.orientation.y
+    assert quat[2] == pose_msg.orientation.z
+    assert quat[3] == pose_msg.orientation.w
+
+    pose_msg2 = PoseToRos2Converter.convert(pose)
     assert pose_msg == pose_msg2
 
 
 def test_no_frame_id(cylinder_bot_world):
-    ROS2MessageConverter.to_ros2_message(HomogeneousTransformationMatrix())
-    ROS2MessageConverter.to_ros2_message(Pose())
-    ROS2MessageConverter.to_ros2_message(Point3())
-    ROS2MessageConverter.to_ros2_message(Vector3())
-    ROS2MessageConverter.to_ros2_message(Quaternion())
+    SemDTToRos2Converter.convert(HomogeneousTransformationMatrix())
+    SemDTToRos2Converter.convert(Pose())
+    SemDTToRos2Converter.convert(Point3())
+    SemDTToRos2Converter.convert(Vector3())
+    SemDTToRos2Converter.convert(Quaternion())
 
-    ROS2MessageConverter.from_ros2_message(TransformStamped(), cylinder_bot_world)
-    ROS2MessageConverter.from_ros2_message(PointStamped(), cylinder_bot_world)
-    ROS2MessageConverter.from_ros2_message(QuaternionStamped(), cylinder_bot_world)
-    ROS2MessageConverter.from_ros2_message(Vector3Stamped(), cylinder_bot_world)
-    ROS2MessageConverter.from_ros2_message(PoseStamped(), cylinder_bot_world)
+    Ros2ToSemDTConverter.convert(geometry_msgs.TransformStamped(), cylinder_bot_world)
+    Ros2ToSemDTConverter.convert(geometry_msgs.PointStamped(), cylinder_bot_world)
+    Ros2ToSemDTConverter.convert(geometry_msgs.QuaternionStamped(), cylinder_bot_world)
+    Ros2ToSemDTConverter.convert(geometry_msgs.Vector3Stamped(), cylinder_bot_world)
+    Ros2ToSemDTConverter.convert(geometry_msgs.PoseStamped(), cylinder_bot_world)
 
 
-def test_convert_shape(cylinder_bot_world):
+def test_convert_box_shape(cylinder_bot_world):
     box = Box(
-        scale=Scale(1, 1, 1),
+        scale=Scale(1, 2, 3),
         color=Color(),
         origin=HomogeneousTransformationMatrix.from_xyz_rpy(
-            1, 2, 3, 1, 2, 3, reference_frame=cylinder_bot_world.get_body_by_name("map")
+            1, 2, 3, reference_frame=cylinder_bot_world.get_body_by_name("map")
         ),
     )
-    shape = ROS2MessageConverter.to_ros2_message(box)
+    shape = SemDTToRos2Converter.convert(box)
 
-    # with pytest.raises(CannotConvertFromRos2Error):
-    box2 = ROS2MessageConverter.from_ros2_message(shape, cylinder_bot_world)
+    box2 = Ros2ToSemDTConverter.convert(shape, cylinder_bot_world)
+    assert box == box2
+
+    shape2 = SemDTToRos2Converter.convert(box2)
+    assert shape == shape2
+
+
+def test_convert_cylinder_shape(cylinder_bot_world):
+    cylinder = Cylinder(
+        width=1,
+        height=2,
+        color=Color(),
+        origin=HomogeneousTransformationMatrix.from_xyz_rpy(
+            1, 2, 3, reference_frame=cylinder_bot_world.get_body_by_name("map")
+        ),
+    )
+    shape = SemDTToRos2Converter.convert(cylinder)
+
+    cylinder2 = Ros2ToSemDTConverter.convert(shape, cylinder_bot_world)
+    assert cylinder == cylinder2
+
+    shape2 = SemDTToRos2Converter.convert(cylinder2)
+    assert shape == shape2
+
+
+def test_convert_sphere_shape(cylinder_bot_world):
+    sphere = Sphere(
+        radius=1,
+        color=Color(),
+        origin=HomogeneousTransformationMatrix.from_xyz_rpy(
+            1, 2, 3, reference_frame=cylinder_bot_world.get_body_by_name("map")
+        ),
+    )
+    shape = SemDTToRos2Converter.convert(sphere)
+
+    sphere2 = Ros2ToSemDTConverter.convert(shape, cylinder_bot_world)
+    assert sphere == sphere2
+
+    shape2 = SemDTToRos2Converter.convert(sphere2)
+    assert shape == shape2
+
+
+def test_convert_mesh_shape(cylinder_bot_world):
+    mesh = FileMesh(
+        filename="test_mesh.obj",
+        color=Color(0.0, 0.0, 0.0, 1.0),
+        origin=HomogeneousTransformationMatrix.from_xyz_rpy(
+            1, 2, 3, reference_frame=cylinder_bot_world.get_body_by_name("map")
+        ),
+    )
+    shape = SemDTToRos2Converter.convert(mesh)
+
+    mesh2 = Ros2ToSemDTConverter.convert(shape, cylinder_bot_world)
+    assert mesh == mesh2
+
+    shape2 = SemDTToRos2Converter.convert(mesh2)
+    assert shape == shape2

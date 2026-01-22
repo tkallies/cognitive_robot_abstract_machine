@@ -1,5 +1,6 @@
 from collections import OrderedDict
 from dataclasses import dataclass, field
+from time import sleep
 from uuid import UUID
 
 import numpy as np
@@ -131,6 +132,7 @@ class TFPublisher(StateChangeCallback):
     def __post_init__(self):
         super().__post_init__()
         self.tf_pub = self.node.create_publisher(TFMessage, self.tf_topic, 10)
+        sleep(0.2)
         self.tf_model_cb = TfPublisherModelCallback(
             node=self.node,
             world=self.world,

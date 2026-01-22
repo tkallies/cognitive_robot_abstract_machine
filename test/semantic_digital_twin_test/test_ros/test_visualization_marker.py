@@ -1,7 +1,9 @@
 from dataclasses import dataclass, field
 from time import sleep
 
-from visualization_msgs.msg import MarkerArray
+from rclpy.duration import Duration
+from rclpy.time import Time
+from visualization_msgs.msg import MarkerArray, Marker
 
 from semantic_digital_twin.adapters.ros.tf_publisher import TFPublisher
 from semantic_digital_twin.adapters.ros.tfwrapper import TFWrapper
@@ -15,6 +17,12 @@ def test_visualization_marker(rclpy_node, cylinder_bot_world):
     tf_publisher = TFPublisher(node=rclpy_node, world=cylinder_bot_world)
     viz = VizMarkerPublisher(
         world=cylinder_bot_world, node=rclpy_node, use_visuals=False
+    )
+    tf_wrapper.wait_for_transform(
+        "map",
+        "bot",
+        timeout=Duration(seconds=1.0),
+        time=Time(),
     )
 
     @dataclass
@@ -39,6 +47,9 @@ def test_visualization_marker(rclpy_node, cylinder_bot_world):
     else:
         assert False, "Callback timed out"
     assert len(callback.last_msg.markers) == 2
+    assert callback.last_msg.markers[0].ns == "environment"
+    assert callback.last_msg.markers[0].type == Marker.CYLINDER
+
     callback.last_msg = None
 
     drive = cylinder_bot_world.get_connections_by_type(OmniDrive)[0]
