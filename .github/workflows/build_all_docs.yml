@@ -9,23 +9,40 @@ on:
       - main
 
 jobs:
-  krrood-doc:
-    uses: ./.github/workflows/krrood/build_and_deploy_doc.yml
-  
-  pycram-doc:
-    uses: ./.github/workflows/pycram/jupyter-book-build.yml
-
-  semantic-digital-twin-doc:
-    uses: ./.github/workflows/semantic_digital_twin/build_and_deploy_doc.yml
-
-  probabilistic-model-doc:
-    uses: ./.github/workflows/probabilistic_model/build_doc.yml
-
-  random-events-doc:
-    uses: ./.github/workflows/random_events/build_doc.yml
+  build-docs:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lib: krrood
+            doc_path: doc
+            artifact_name: krrood-doc
+            use_container: false
+          - lib: pycram
+            doc_path: doc/source
+            artifact_name: pycram-doc
+            use_container: false
+          - lib: semantic_digital_twin
+            doc_path: doc
+            artifact_name: semantic-digital-twin-doc
+            use_container: true
+          - lib: probabilistic_model
+            doc_path: doc
+            artifact_name: probabilistic-model-doc
+            use_container: false
+          - lib: random_events
+            doc_path: docs
+            artifact_name: random-events-doc
+            use_container: false
+    uses: ./.github/workflows/build_doc_reusable.yml
+    with:
+      lib: ${{ matrix.lib }}
+      doc_path: ${{ matrix.doc_path }}
+      artifact_name: ${{ matrix.artifact_name }}
+      use_container: ${{ matrix.use_container }}
 
   deploy-all-docs:
-    needs: [krrood-doc, pycram-doc, semantic-digital-twin-doc, probabilistic-model-doc, random-events-doc]
+    needs: [build-docs]
     runs-on: ubuntu-latest
     permissions:
       pages: write
