@@ -670,3 +670,36 @@ def test_position_set(session, database):
     r = session.scalars(select(PositionSetDAO)).one()
     reconstructed = r.from_dao()
     assert reconstructed == obj
+
+
+def test_post_init_and_circular_reference(session, database):
+    """
+    Test the 4-phase from_dao logic with __post_init__ and circular references.
+    """
+    c1_dao = ContainerGenerationDAO()
+    i1_dao = ItemWithBackreferenceDAO(value=10)
+    i2_dao = ItemWithBackreferenceDAO(value=20)
+
+    c1_dao.items = [i1_dao, i2_dao]
+    i1_dao.container = c1_dao
+    i2_dao.container = c1_dao
+
+    session.add(c1_dao)
+    session.commit()
+
+    # Clear session to ensure we are loading from DB
+    session.expunge_all()
+
+    queried_c1_dao = session.scalars(select(ContainerGenerationDAO)).one()
+
+    # Reconstruct domain object
+    c1 = queried_c1_dao.from_dao()
+
+    assert isinstance(c1, ContainerGeneration)
+    assert len(c1.items) == 2
+    assert c1.items[0].value == 10
+    assert c1.items[1].value == 20
+
+    # Check if __post_init__ was called and backreferences are set
+    assert c1.items[0].container is c1
+    assert c1.items[1].container is c1
