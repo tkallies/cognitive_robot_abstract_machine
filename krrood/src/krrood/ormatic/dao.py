@@ -883,7 +883,7 @@ class DataAccessObject(HasGeneric[T]):
         :return: The domain object.
         """
         for relationship in mapper.relationships:
-            self._collect_relationship_kwarg(relationship, {}, {}, state)
+            self._collect_relationship_kwarg(relationship, {}, state)
         self._build_base_keyword_arguments_for_alternative_parent(argument_names, state)
         return domain_object
 
@@ -1007,8 +1007,7 @@ class DataAccessObject(HasGeneric[T]):
         :param state: The conversion state.
         :return: The corresponding domain object.
         """
-        instance, _ = self._resolve_dao_to_domain(dao_instance, state)
-        return instance
+        return self._resolve_dao_to_domain(dao_instance, state)
 
     def _allocate_uninitialized_and_memoize(
         self, state: FromDataAccessObjectState
@@ -1039,7 +1038,6 @@ class DataAccessObject(HasGeneric[T]):
         self,
         relationship: RelationshipProperty,
         relationship_keyword_arguments: Dict[str, Any],
-        circular_references: Dict[str, Any],
         state: FromDataAccessObjectState,
     ) -> None:
         """
@@ -1047,81 +1045,67 @@ class DataAccessObject(HasGeneric[T]):
 
         :param relationship: The relationship property.
         :param relationship_keyword_arguments: Target dictionary for arguments.
-        :param circular_references: Target dictionary for circular references.
         :param state: The conversion state.
         """
         value = getattr(self, relationship.key)
         if self._is_single_relationship(relationship):
-            res, circular = self._resolve_single_relationship_from_dao(value, state)
+            res = self._resolve_single_relationship_from_dao(value, state)
             relationship_keyword_arguments[relationship.key] = res
-            if circular is not None:
-                circular_references[relationship.key] = circular
         elif relationship.direction in (ONETOMANY, MANYTOMANY):
-            res, circulars = self._resolve_collection_relationship_from_dao(
-                value, state
-            )
+            res = self._resolve_collection_relationship_from_dao(value, state)
             relationship_keyword_arguments[relationship.key] = res
-            if circulars:
-                circular_references[relationship.key] = circulars
         else:
             raise UnsupportedRelationshipError(relationship)
 
     def _resolve_single_relationship_from_dao(
         self, value: Any, state: FromDataAccessObjectState
-    ) -> Tuple[Any, Optional[DataAccessObject]]:
+    ) -> Any:
         """
         Resolve a single DAO relationship to its domain object.
 
         :param value: The DAO instance.
         :param state: The conversion state.
-        :return: Tuple of domain object and circular reference marker.
+        :return: The domain object.
         """
         if value is None:
-            return None, None
+            return None
         return self._resolve_dao_to_domain(value, state)
 
     def _resolve_collection_relationship_from_dao(
         self, value: Any, state: FromDataAccessObjectState
-    ) -> Tuple[Any, List[DataAccessObject]]:
+    ) -> Any:
         """
         Resolve a collection of DAOs to domain objects.
 
         :param value: The collection of DAO instances.
         :param state: The conversion state.
-        :return: Tuple of domain object collection and list of circular references.
+        :return: The domain object collection.
         """
         if not value:
-            return value, []
+            return value
 
         instances = []
-        any_circular = False
         for v in value:
-            instance, circular = self._resolve_dao_to_domain(v, state)
+            instance = self._resolve_dao_to_domain(v, state)
             instances.append(instance)
-            if circular is not None:
-                any_circular = True
 
-        return list(instances), (list(value) if any_circular else [])
+        return list(instances)
 
     def _resolve_dao_to_domain(
         self, dao_instance: DataAccessObject, state: FromDataAccessObjectState
-    ) -> Tuple[Any, Optional[DataAccessObject]]:
+    ) -> Any:
         """
         Resolve a single DAO instance to its domain object.
 
         :param dao_instance: The DAO instance.
         :param state: The conversion state.
-        :return: Tuple of domain object and circular reference marker.
+        :return: The domain object.
         """
         if state.has(dao_instance):
-            domain_object = state.get(dao_instance)
-            # It's circular if it's currently being processed and not yet initialized
-            circular = dao_instance if not state.is_initialized(dao_instance) else None
-            return domain_object, circular
+            return state.get(dao_instance)
 
         # Delegation to from_dao handles discovery/allocation without recursion depth risk
-        domain_object = dao_instance.from_dao(state=state)
-        return domain_object, None
+        return dao_instance.from_dao(state=state)
 
     def _build_base_keyword_arguments_for_alternative_parent(
         self,
