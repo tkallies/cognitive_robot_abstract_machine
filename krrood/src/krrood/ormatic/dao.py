@@ -15,6 +15,8 @@ from sqlalchemy.orm import MANYTOONE, MANYTOMANY, ONETOMANY, RelationshipPropert
 from typing_extensions import (
     Type,
     get_args,
+    get_origin,
+    get_type_hints,
     Dict,
     Any,
     TypeVar,
@@ -26,6 +28,18 @@ from typing_extensions import (
     Tuple,
     Set,
 )
+
+
+@lru_cache(maxsize=None)
+def _get_type_hints_cached(clazz: Type) -> Dict[str, Any]:
+    """
+    Get type hints for a class.
+    """
+    try:
+        return get_type_hints(clazz)
+    except Exception:
+        return {}
+
 
 from collections import deque
 from .exceptions import (
@@ -366,6 +380,9 @@ class DataAccessObject(HasGeneric[T]):
          Processes the discovered objects in reverse order. By moving from leaves
          to roots, it ensures that child dependencies are fully initialized before
          they are passed to a parent's constructor (``__init__``).
+         During this phase, sets are represented as lists, as the hashes of objects are not yet available.
+        - Phase 3: Finalizing Containers:
+          After all objects have been initialized, lists that should have been sets are converted back to sets.
 
     Handling Circular References
     ----------------------------
@@ -380,8 +397,7 @@ class DataAccessObject(HasGeneric[T]):
     --------------------
 
     For domain objects that do not map 1:1 to a single DAO (e.g., those requiring
-    special constructor logic or representing a view of multiple tables),
-    :class:`AlternativeMapping` can be used. The converter recognizes these and
+    special constructor logic) :class:`AlternativeMapping` can be used. The converter recognizes these and
     delegates the creation of the domain object to the mapping's ``create_from_dao``
     method during the Filling Phase.
 
@@ -780,6 +796,7 @@ class DataAccessObject(HasGeneric[T]):
 
         self._discover_dependencies(state, discovery_order)
         self._fill_domain_objects(state, discovery_order)
+        self._finalize_containers(state, discovery_order)
 
         state.is_processing = False
 
@@ -821,6 +838,36 @@ class DataAccessObject(HasGeneric[T]):
             if not state.is_initialized(work_item.dao_instance):
                 work_item.dao_instance._fill_from_dao(work_item.domain_object, state)
                 state.mark_initialized(work_item.dao_instance)
+
+    def _finalize_containers(
+        self,
+        state: FromDataAccessObjectState,
+        discovery_order: List[FromDataAccessObjectWorkItem],
+    ) -> None:
+        """
+        Convert temporary lists to their final container types.
+        """
+        processed_ids = set()
+        for work_item in discovery_order:
+            domain_object = state.get(work_item.dao_instance)
+            if domain_object is not None and id(domain_object) not in processed_ids:
+                self._finalize_object_containers(domain_object)
+                processed_ids.add(id(domain_object))
+
+    @staticmethod
+    def _finalize_object_containers(domain_object: Any) -> None:
+        """
+        Convert lists to sets based on type hints.
+        """
+        hints = _get_type_hints_cached(type(domain_object))
+
+        for attr_name, hint in hints.items():
+            origin = get_origin(hint)
+            # Handle both typing.Set[...] and built-in set
+            if origin is set or hint is set:
+                value = getattr(domain_object, attr_name, None)
+                if isinstance(value, list):
+                    setattr(domain_object, attr_name, set(value))
 
     def _register_for_conversion(self, state: FromDataAccessObjectState) -> T:
         """
@@ -1025,7 +1072,7 @@ class DataAccessObject(HasGeneric[T]):
             setattr(domain_object, key, value)
             return
         instances = [self._get_or_allocate_domain_object(v, state) for v in value]
-        setattr(domain_object, key, type(value)(instances))
+        setattr(domain_object, key, list(instances))
 
     def _get_or_allocate_domain_object(
         self, dao_instance: DataAccessObject, state: FromDataAccessObjectState
@@ -1175,7 +1222,7 @@ class DataAccessObject(HasGeneric[T]):
             if circular is not None:
                 any_circular = True
 
-        return type(value)(instances), (list(value) if any_circular else [])
+        return list(instances), (list(value) if any_circular else [])
 
     def _resolve_dao_to_domain(
         self, dao_instance: DataAccessObject, state: FromDataAccessObjectState
