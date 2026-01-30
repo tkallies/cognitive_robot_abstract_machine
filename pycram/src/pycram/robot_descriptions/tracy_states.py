@@ -6,9 +6,14 @@ from ..datastructures.enums import (
     Arms,
     GripperState as GripperStateEnum,
 )
-from ..joint_state import JointState, ArmState, GripperState, JointStateManager
+from ..joint_state import (
+    PyCRAMJointState,
+    ArmStatePyCRAM,
+    GripperStatePyCRAM,
+    JointStateManager,
+)
 
-right_park = ArmState(
+right_park = ArmStatePyCRAM(
     name=PrefixedName("tracy", "right_park"),
     joint_names=[
         "right_shoulder_pan_joint",
@@ -23,7 +28,7 @@ right_park = ArmState(
     arm=Arms.RIGHT,
 )
 
-left_park = ArmState(
+left_park = ArmStatePyCRAM(
     name=PrefixedName("tracy", "left_park"),
     joint_names=[
         "left_shoulder_pan_joint",
@@ -38,7 +43,7 @@ left_park = ArmState(
     arm=Arms.LEFT,
 )
 
-both_park = ArmState(
+both_park = ArmStatePyCRAM(
     name=PrefixedName("tracy", "both_park"),
     joint_names=[
         "left_shoulder_pan_joint",
@@ -59,7 +64,7 @@ both_park = ArmState(
     arm=Arms.BOTH,
 )
 
-left_gripper_open = GripperState(
+left_gripper_open = GripperStatePyCRAM(
     name=PrefixedName("tracy", "left_gripper_open"),
     joint_names=[
         "left_robotiq_85_left_knuckle_joint",
@@ -69,7 +74,7 @@ left_gripper_open = GripperState(
     gripper=Arms.LEFT,
 )
 
-left_gripper_close = GripperState(
+left_gripper_close = GripperStatePyCRAM(
     name=PrefixedName("tracy", "left_gripper_close"),
     joint_names=[
         "left_robotiq_85_left_knuckle_joint",
@@ -79,7 +84,7 @@ left_gripper_close = GripperState(
     gripper=Arms.LEFT,
 )
 
-right_gripper_open = GripperState(
+right_gripper_open = GripperStatePyCRAM(
     name=PrefixedName("tracy", "right_gripper_open"),
     joint_names=[
         "right_robotiq_85_left_knuckle_joint",
@@ -89,7 +94,7 @@ right_gripper_open = GripperState(
     gripper=Arms.RIGHT,
 )
 
-right_gripper_close = GripperState(
+right_gripper_close = GripperStatePyCRAM(
     name=PrefixedName("tracy", "right_gripper_close"),
     joint_names=[
         "right_robotiq_85_left_knuckle_joint",

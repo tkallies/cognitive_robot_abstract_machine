@@ -11,7 +11,7 @@ from .helper import Singleton
 
 
 @dataclass
-class JointState:
+class PyCRAMJointState:
     """
     Represents a named joint state of a robot. For example, the park position of the arms.
     """
@@ -48,12 +48,12 @@ class JointState:
 
 
 @dataclass
-class ArmState(JointState):
+class ArmStatePyCRAM(PyCRAMJointState):
     arm: Arms = None
 
 
 @dataclass
-class GripperState(JointState):
+class GripperStatePyCRAM(PyCRAMJointState):
     """
     Represents the state of a gripper, such as open or closed.
     """
@@ -67,7 +67,7 @@ class JointStateManager(metaclass=Singleton):
     Manages joint states for different robot arms and their configurations.
     """
 
-    joint_states: Dict[Type[AbstractRobot], List[JointState]] = field(
+    joint_states: Dict[Type[AbstractRobot], List[PyCRAMJointState]] = field(
         default_factory=dict
     )
     """
@@ -76,7 +76,7 @@ class JointStateManager(metaclass=Singleton):
 
     def get_arm_state(
         self, arm: Arms, state_type: StaticJointState, robot_view: AbstractRobot
-    ) -> Union[ArmState, None]:
+    ) -> Union[ArmStatePyCRAM, None]:
         """
         Retrieves the joint state for a specific arm and state type.
 
@@ -87,7 +87,7 @@ class JointStateManager(metaclass=Singleton):
         """
         for joint_state in self.joint_states[robot_view.__class__]:
             if (
-                isinstance(joint_state, ArmState)
+                isinstance(joint_state, ArmStatePyCRAM)
                 and joint_state.arm == arm
                 and joint_state.state_type == state_type
             ):
@@ -96,7 +96,7 @@ class JointStateManager(metaclass=Singleton):
 
     def get_gripper_state(
         self, gripper: Arms, state_type: StaticJointState, robot_view: AbstractRobot
-    ) -> Union[GripperState, None]:
+    ) -> Union[GripperStatePyCRAM, None]:
         """
         Retrieves the joint state for a specific gripper and state type.
 
@@ -107,7 +107,7 @@ class JointStateManager(metaclass=Singleton):
         """
         for joint_state in self.joint_states[robot_view.__class__]:
             if (
-                isinstance(joint_state, GripperState)
+                isinstance(joint_state, GripperStatePyCRAM)
                 and joint_state.gripper == gripper
                 and joint_state.state_type == state_type
             ):
@@ -116,7 +116,7 @@ class JointStateManager(metaclass=Singleton):
 
     def get_joint_state(
         self, state: Enum, robot_view: AbstractRobot
-    ) -> List[JointState]:
+    ) -> List[PyCRAMJointState]:
         """
         Retrieves all joint states of a specific type for a given robot.
 
@@ -131,7 +131,7 @@ class JointStateManager(metaclass=Singleton):
         ]
 
     def add_joint_states(
-        self, robot: Type[AbstractRobot], joint_states: List[JointState]
+        self, robot: Type[AbstractRobot], joint_states: List[PyCRAMJointState]
     ):
         """
         Adds joint states for a specific robot type.

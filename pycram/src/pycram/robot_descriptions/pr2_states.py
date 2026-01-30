@@ -7,9 +7,14 @@ from ..datastructures.enums import (
     GripperState as GripperStateEnum,
     TorsoState,
 )
-from ..joint_state import JointState, ArmState, GripperState, JointStateManager
+from ..joint_state import (
+    PyCRAMJointState,
+    ArmStatePyCRAM,
+    GripperStatePyCRAM,
+    JointStateManager,
+)
 
-right_park = ArmState(
+right_park = ArmStatePyCRAM(
     name=PrefixedName("pr2", "right_park"),
     joint_names=[
         "r_shoulder_pan_joint",
@@ -25,7 +30,7 @@ right_park = ArmState(
     arm=Arms.RIGHT,
 )
 
-left_park = ArmState(
+left_park = ArmStatePyCRAM(
     name=PrefixedName("pr2", "left_park"),
     joint_names=[
         "l_shoulder_pan_joint",
@@ -41,7 +46,7 @@ left_park = ArmState(
     arm=Arms.LEFT,
 )
 
-both_park = ArmState(
+both_park = ArmStatePyCRAM(
     name=PrefixedName("pr2", "both_park"),
     joint_names=[
         "l_shoulder_pan_joint",
@@ -79,7 +84,7 @@ both_park = ArmState(
     arm=Arms.BOTH,
 )
 
-left_gripper_open = GripperState(
+left_gripper_open = GripperStatePyCRAM(
     name=PrefixedName("pr2", "left_gripper_open"),
     joint_names=["l_gripper_l_finger_joint", "l_gripper_r_finger_joint"],
     joint_positions=[0.548, 0.548],
@@ -87,7 +92,7 @@ left_gripper_open = GripperState(
     gripper=Arms.LEFT,
 )
 
-left_gripper_close = GripperState(
+left_gripper_close = GripperStatePyCRAM(
     name=PrefixedName("pr2", "left_gripper_close"),
     joint_names=["l_gripper_l_finger_joint", "l_gripper_r_finger_joint"],
     joint_positions=[0.0, 0.0],
@@ -95,7 +100,7 @@ left_gripper_close = GripperState(
     gripper=Arms.LEFT,
 )
 
-right_gripper_open = GripperState(
+right_gripper_open = GripperStatePyCRAM(
     name=PrefixedName("pr2", "right_gripper_open"),
     joint_names=["r_gripper_l_finger_joint", "r_gripper_r_finger_joint"],
     joint_positions=[0.548, 0.548],
@@ -103,7 +108,7 @@ right_gripper_open = GripperState(
     gripper=Arms.RIGHT,
 )
 
-right_gripper_close = GripperState(
+right_gripper_close = GripperStatePyCRAM(
     name=PrefixedName("pr2", "right_gripper_close"),
     joint_names=["r_gripper_l_finger_joint", "r_gripper_r_finger_joint"],
     joint_positions=[0.0, 0.0],
@@ -111,21 +116,21 @@ right_gripper_close = GripperState(
     gripper=Arms.RIGHT,
 )
 
-torso_low = JointState(
+torso_low = PyCRAMJointState(
     name=PrefixedName("pr2", "torso_low"),
     joint_names=["torso_lift_joint"],
     joint_positions=[0.0],
     state_type=TorsoState.LOW,
 )
 
-torso_mid = JointState(
+torso_mid = PyCRAMJointState(
     name=PrefixedName("pr2", "torso_mid"),
     joint_names=["torso_lift_joint"],
     joint_positions=[0.15],
     state_type=TorsoState.MID,
 )
 
-torso_high = JointState(
+torso_high = PyCRAMJointState(
     name=PrefixedName("pr2", "torso_high"),
     joint_names=["torso_lift_joint"],
     joint_positions=[0.3],

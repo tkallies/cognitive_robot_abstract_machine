@@ -112,7 +112,7 @@ class SetGripperAction(ActionDescription):
     def description(
         cls,
         gripper: Union[Iterable[Arms], Arms],
-        motion: Union[Iterable[GripperState], GripperState] = None,
+        motion: Union[Iterable[GripperStatePyCRAM], GripperStatePyCRAM] = None,
     ) -> PartialDesignator[SetGripperAction]:
         return PartialDesignator[SetGripperAction](
             SetGripperAction, gripper=gripper, motion=motion
