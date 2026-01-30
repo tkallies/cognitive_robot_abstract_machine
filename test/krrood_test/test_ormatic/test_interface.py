@@ -711,11 +711,21 @@ def test_polymorphic_enum(session, database):
     v3 = PolymorphicEnumAssociation(ChildEnum2.B)
     v4 = PolymorphicEnumAssociation(ChildEnum2.C)
 
-    dao_1 = to_dao(v1)
+    dao_1, dao_2, dao_3, dao_4 = to_dao(v1), to_dao(v2), to_dao(v3), to_dao(v4)
 
-    session.add(dao_1)
+    session.add_all([dao_1, dao_2, dao_3, dao_4])
     session.commit()
 
     statement = select(PolymorphicEnumAssociationDAO)
-    r = session.scalars(statement).one()
-    print(r)
+    r1, r2, r3, r4 = session.scalars(statement).all()
+
+    assert r1.from_dao() == v1
+    assert r2.from_dao() == v2
+    assert r3.from_dao() == v3
+    assert r4.from_dao() == v4
+
+    statement = select(PolymorphicEnumAssociationDAO).where(
+        PolymorphicEnumAssociationDAO.value == ChildEnum1.B
+    )
+    r = session.scalars(statement).all()
+    assert len(r) == 1

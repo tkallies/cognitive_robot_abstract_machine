@@ -59,7 +59,7 @@ class TypeDict:
         return self._dict.__len__()
 
     def __contains__(self, key: Type) -> bool:
-        return self._get_inheritance_path_length_of_keys(key) is not None
+        return len(self._get_inheritance_path_length_of_keys(key)) > 0
 
     def keys(self) -> Iterator[Type]:
         return self._dict.keys()
