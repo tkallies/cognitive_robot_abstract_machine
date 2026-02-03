@@ -50,6 +50,11 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Initialize submodules explicitly
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
       - name: Install dependencies
         run: |
           source /opt/ros/cram-env/bin/activate

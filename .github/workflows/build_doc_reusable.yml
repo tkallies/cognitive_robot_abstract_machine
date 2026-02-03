@@ -36,6 +36,11 @@ jobs:
           path: ${{ inputs.use_container && 'ros/src/semantic_digital_twin' || '.' }}
           submodules: ${{ inputs.use_container && 'false' || 'true' }}
 
+      - name: Initialize submodules explicitly
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
       - name: Update semantic_digital_twin source files (Container only)
         if: ${{ inputs.use_container }}
         run: |
