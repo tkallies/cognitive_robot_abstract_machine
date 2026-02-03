@@ -13,6 +13,17 @@ on:
     paths:
       - 'semantic_digital_twin/**'
       - '.github/workflows/sdt_self_assessment.yml'
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: 'Log level'
+        required: true
+        default: 'info'
+        type: choice
+        options:
+          - info
+          - warning
+          - debug
 
 jobs:
   to-lowercase:
