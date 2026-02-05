@@ -177,7 +177,7 @@ def test_rule_tree_with_an_alternative(doors_and_drawers_world):
         ):
             Add(views, inference(Door)(handle=handle, body=body))
 
-    # query._render_tree_()
+    query.visualize()
 
     all_solutions = list(query.evaluate())
     assert len(all_solutions) == 4, "Should generate 3 drawers, 1 door"

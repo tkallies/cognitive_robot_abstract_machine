@@ -382,6 +382,53 @@ ResultMapping = Callable[[Iterable[Bindings]], Iterator[Bindings]]
 A function that maps the results of a query object descriptor to a new set of results.
 """
 
+@dataclass(eq=False, repr=False)
+class ConstraintSpecifier(SymbolicExpression[T], ABC):
+
+    _child_: SymbolicExpression[T]
+    """
+    The conditions expression which generate the valid bindings that satisfy the constraints.
+    """
+
+    @cached_property
+    def conditions(self) -> SymbolicExpression:
+        """
+        The conditions expression.
+        """
+        return self._child_
+
+    def _evaluate__(
+        self,
+        sources: Optional[Bindings] = None,
+        parent: Optional[SymbolicExpression] = None,
+    ) -> Iterator[OperationResult]:
+        return self._child_._evaluate__(sources, parent)
+
+    @property
+    def _is_false_(self) -> bool:
+        return self._child_._is_false_
+
+    @_is_false_.setter
+    def _is_false_(self, value: bool):
+        self._child_._is_false_ = value
+
+    @property
+    def _name_(self) -> str:
+        return self.__class__.__name__
+
+    @cached_property
+    def _all_variable_instances_(self) -> List[Variable]:
+        return self._child_._all_variable_instances_
+
+
+@dataclass(eq=False, repr=False)
+class Where(ConstraintSpecifier[T]):
+    """
+    A symbolic expression that represents the `where()` statement of `QueryObjectDescriptor`.
+    """
+    ...
+
+
 
 @dataclass(eq=False, repr=False)
 class Selectable(SymbolicExpression[T], ABC):
@@ -581,6 +628,14 @@ class ResultProcessor(CanBehaveLikeAVariable[T], ABC):
     """
 
     _child_: SymbolicExpression[T]
+    """
+    The child expression of the processor where the results to be processed come from.
+    """
+
+    def __post_init__(self):
+        if isinstance(self._child_, QueryObjectDescriptor):
+            self._child_._build__()
+        super().__post_init__()
 
     @property
     def _name_(self) -> str:
@@ -853,7 +908,6 @@ class ResultQuantifier(ResultProcessor[T], ABC):
     def __post_init__(self):
         if not isinstance(self._child_, QueryObjectDescriptor):
             raise InvalidEntityType(type(self._child_), [QueryObjectDescriptor])
-        self._child_._build__()
         super().__post_init__()
         self._var_ = (
             self._child_._var_ if isinstance(self._child_, Selectable) else None
@@ -1005,7 +1059,7 @@ class GroupBy(SymbolicExpression[T]):
     """
 
     def __post_init__(self):
-        self._child_ = self._query_descriptor_._where_expression_
+        self._child_ = self._query_descriptor_._where_conditions_expression_
         super().__post_init__()
 
     @cached_property
@@ -1016,6 +1070,7 @@ class GroupBy(SymbolicExpression[T]):
     def _name_(self) -> str:
         return f"GroupBy({', '.join([var._name_ for var in self._variables_to_group_by_])})"
 
+    @cached_property
     def _all_variable_instances_(self) -> List[Variable]:
         return self._child_._all_variable_instances_ + self._variables_to_group_by_
 
@@ -1150,11 +1205,11 @@ class QueryObjectDescriptor(SymbolicExpression[T], ABC):
     """
     The condition list of the query object descriptor.
     """
-    _having_expression_: Optional[SymbolicExpression] = field(default=None, init=False)
+    _having_conditions_expression_: Optional[SymbolicExpression] = field(default=None, init=False)
     """
     The having expression of the query object descriptor.
     """
-    _where_expression_: Optional[SymbolicExpression] = field(default=None, init=False)
+    _where_conditions_expression_: Optional[SymbolicExpression] = field(default=None, init=False)
     """
     The where expression of the query object descriptor.
     """
@@ -1240,7 +1295,7 @@ class QueryObjectDescriptor(SymbolicExpression[T], ABC):
             else self._where_condition_list_[0]
         )
 
-        self._where_expression_ = expression
+        self._where_conditions_expression_ = expression
         return self
 
     def having(self, *conditions: ConditionType) -> Self:
@@ -1260,7 +1315,7 @@ class QueryObjectDescriptor(SymbolicExpression[T], ABC):
             if len(self._having_condition_list_) > 1
             else self._having_condition_list_[0]
         )
-        self._having_expression_ = expression
+        self._having_conditions_expression_ = expression
         return self
 
     def _assert_correct_conditions__(self, conditions: List[ConditionType]):
@@ -1442,14 +1497,15 @@ class QueryObjectDescriptor(SymbolicExpression[T], ABC):
         having = None
         if self._group_:
             group_by = GroupBy(self)
-            if self._having_expression_:
-                having = Having(left=group_by, right=self._having_expression_)
+            if self._having_conditions_expression_:
+                having = Having(group_by=group_by, _child_=self._having_conditions_expression_)
         if having:
             self._update_child_(having)
         elif group_by:
             self._update_child_(group_by)
-        elif self._where_expression_:
-            self._update_child_(self._where_expression_)
+        elif self._where_conditions_expression_:
+            where = Where(self._where_conditions_expression_)
+            self._update_child_(where)
 
     def _evaluate__(
         self,
@@ -2270,24 +2326,13 @@ class BinaryOperator(SymbolicExpression, ABC):
 
 
 @dataclass(eq=False, repr=False)
-class Having(BinaryOperator):
+class Having(ConstraintSpecifier[T]):
     """
-    A symbolic having expression that can be used to filter the grouped results of a query.
+    A symbolic having expression that can be used to filter the grouped results of a query. Is constructed through
+    the `QueryObjectDescriptor` using the `having()` method.
     """
 
-    left: GroupBy
-
-    @cached_property
-    def group_by(self) -> GroupBy:
-        return self.left
-
-    @cached_property
-    def conditions(self) -> SymbolicExpression:
-        return self.right
-
-    @property
-    def _name_(self) -> str:
-        return self.__class__.__name__
+    group_by: GroupBy
 
     def _evaluate__(
         self,
@@ -2322,6 +2367,10 @@ class Having(BinaryOperator):
         """
         self.is_false = result.is_false
         return result.is_false
+
+    @cached_property
+    def _all_variable_instances_(self) -> List[Variable]:
+        return self.group_by._all_variable_instances_ + super()._all_variable_instances_
 
 
 def not_contains(container, item) -> bool:

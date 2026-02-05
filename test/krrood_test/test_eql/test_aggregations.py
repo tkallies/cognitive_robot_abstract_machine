@@ -306,8 +306,8 @@ def test_having_node_hierarchy(departments_and_employees):
     descriptor = query._child_
     # Graph hierarchy check
     assert isinstance(descriptor._child_, Having)
-    assert isinstance(descriptor._child_.left, GroupBy)
-    assert descriptor._child_.right._name_ == ">"
+    assert isinstance(descriptor._child_.group_by, GroupBy)
+    assert descriptor._child_.conditions._name_ == ">"
 
 
 def test_complex_having_success(departments_and_employees):
