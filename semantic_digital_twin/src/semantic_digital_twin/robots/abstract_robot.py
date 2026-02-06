@@ -454,22 +454,22 @@ class AbstractRobot(Agent):
     The base of the robot, the part closes to the floor
     """
 
-    manipulators: Set[Manipulator] = field(default_factory=set)
+    manipulators: List[Manipulator] = field(default_factory=list)
     """
     A collection of manipulators in the robot, such as grippers.
     """
 
-    sensors: Set[Sensor] = field(default_factory=set)
+    sensors: List[Sensor] = field(default_factory=list)
     """
     A collection of sensors in the robot, such as cameras.
     """
 
-    manipulator_chains: Set[KinematicChain] = field(default_factory=set)
+    manipulator_chains: List[KinematicChain] = field(default_factory=list)
     """
     A collection of all kinematic chains containing a manipulator, such as a gripper.
     """
 
-    sensor_chains: Set[KinematicChain] = field(default_factory=set)
+    sensor_chains: List[KinematicChain] = field(default_factory=list)
     """
     A collection of all kinematic chains containing a sensor, such as a camera.
     """
@@ -554,7 +554,7 @@ class AbstractRobot(Agent):
         """
         Adds a manipulator to the robot's collection of manipulators.
         """
-        self.manipulators.add(manipulator)
+        self.manipulators.append(manipulator)
         self._semantic_annotations.add(manipulator)
         manipulator.assign_to_robot(self)
 
@@ -562,7 +562,7 @@ class AbstractRobot(Agent):
         """
         Adds a sensor to the robot's collection of sensors.
         """
-        self.sensors.add(sensor)
+        self.sensors.append(sensor)
         self._semantic_annotations.add(sensor)
         sensor.assign_to_robot(self)
 
@@ -599,9 +599,9 @@ class AbstractRobot(Agent):
             )
             return
         if kinematic_chain.manipulator is not None:
-            self.manipulator_chains.add(kinematic_chain)
+            self.manipulator_chains.append(kinematic_chain)
         if kinematic_chain.sensors:
-            self.sensor_chains.add(kinematic_chain)
+            self.sensor_chains.append(kinematic_chain)
         self._semantic_annotations.add(kinematic_chain)
         kinematic_chain.assign_to_robot(self)
 
