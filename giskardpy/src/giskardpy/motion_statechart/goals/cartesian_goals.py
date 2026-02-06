@@ -27,13 +27,22 @@ from ..tasks.cartesian_tasks import (
 
 @dataclass(eq=False, repr=False)
 class DiffDriveBaseGoal(Sequence):
+    """
+    A sequence that moves the robot to a goal pose using a differential drive.
+    1. Orient to goal position
+    2. Drive to goal position
+    3. Orient to goal orientation
+    """
+
     diff_drive_connection: DiffDrive | None = field(kw_only=True, default=None)
+    """Drive connection to use. If it is None and there is only one diff drive in the world, it will be used."""
+
     goal_pose: HomogeneousTransformationMatrix = field(kw_only=True)
-    max_linear_velocity: float = 0.1
-    max_angular_velocity: float = 0.5
+    """Pose to reach."""
+
     weight: float = DefaultWeights.WEIGHT_ABOVE_CA
-    pointing_axis = None
-    always_forward: bool = False
+    """Task priority relative to other tasks."""
+
     nodes: list[MotionStatechartNode] = field(default_factory=list, init=False)
 
     def expand(self, context: BuildContext) -> None:
@@ -66,24 +75,24 @@ class DiffDriveBaseGoal(Sequence):
 
         self.nodes = [
             CartesianOrientation(
+                name=f"{self.name}/step1",
                 root_link=map,
                 tip_link=tip,
                 goal_orientation=root_R_first_orientation,
-                name=self.name,
                 weight=self.weight,
             ),
             CartesianPose(
+                name=f"{self.name}/step2",
                 root_link=map,
                 tip_link=tip,
                 goal_pose=root_T_goal2,
-                name=self.name,
                 weight=self.weight,
             ),
             CartesianPose(
+                name=f"{self.name}/step3",
                 root_link=map,
                 tip_link=tip,
                 goal_pose=root_T_goal,
-                name=self.name,
                 weight=self.weight,
             ),
         ]
@@ -92,14 +101,27 @@ class DiffDriveBaseGoal(Sequence):
 
 @dataclass(eq=False, repr=False)
 class CartesianPoseStraight(Parallel):
+    """
+    Like CartesianPose, but constrains the tip link to move in a straight line towards the goal.
+    """
+
     root_link: KinematicStructureEntity = field(kw_only=True)
+    """Name of the root link of the kin chain."""
+
     tip_link: KinematicStructureEntity = field(kw_only=True)
+    """Name of the tip link of the kin chain."""
+
     goal_pose: HomogeneousTransformationMatrix = field(kw_only=True)
+    """The goal pose."""
+
     weight: float = DefaultWeights.WEIGHT_ABOVE_CA
+    """Task priority relative to other tasks."""
+
     binding_policy: GoalBindingPolicy = field(
         default=GoalBindingPolicy.Bind_at_build, kw_only=True
     )
     """Describes when the goal is computed. See GoalBindingPolicy for more information."""
+
     nodes: list[MotionStatechartNode] = field(default_factory=list, init=False)
 
     def expand(self, context: BuildContext) -> None:
