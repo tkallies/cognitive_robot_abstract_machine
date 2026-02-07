@@ -247,15 +247,6 @@ class WrappedTable:
         return result
 
     @cached_property
-    def data_access_object_parent_name(self):
-        result = self.wrapped_clazz.clazz.__module__
-        if isinstance(self.wrapped_clazz, WrappedSpecializedGeneric):
-            result += f".{self.wrapped_clazz.clazz}"
-        else:
-            result += f".{self.wrapped_clazz.clazz.__name__}"
-        return result
-
-    @cached_property
     def parent_table(self) -> Optional[WrappedTable]:
         """
         Resolve the parent DAO table for this table.

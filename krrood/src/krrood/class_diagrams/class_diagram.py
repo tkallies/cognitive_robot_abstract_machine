@@ -11,6 +11,8 @@ from typing import get_args, get_origin, _GenericAlias
 
 import rustworkx as rx
 
+from ..utils import module_and_class_name
+
 try:
     from rustworkx_utils import RWXNode
 except ImportError:
@@ -180,12 +182,21 @@ class WrappedClass:
     def __hash__(self):
         return hash((self.index, self.clazz))
 
+    @property
+    def name_with_entire_path(self) -> str:
+        return module_and_class_name(self.clazz)
+
 
 @dataclass(unsafe_hash=True)
 class WrappedSpecializedGeneric(WrappedClass):
     """
     Specialization of WrappedClass for completely parameterized generic types, e.g. Generic[float].
     """
+
+    @property
+    def name_with_entire_path(self) -> str:
+        # return f"{module_and_class_name(self.clazz)}[{", ".join(module_and_class_name(p) for p in self.clazz.__parameters__)}]"
+        return str(self.clazz)
 
     @cached_property
     def specialized_dataclass(self):

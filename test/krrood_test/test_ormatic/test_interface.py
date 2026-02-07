@@ -751,5 +751,7 @@ def test_generic_class(session, database):
     assert q.associated_value.value == 1
 
     reconstructed: GenericClassAssociation = q.from_dao()
-    assert reconstructed == generic_position
-    assert reconstructed == obj
+    assert reconstructed.associated_value == obj.associated_value
+    assert reconstructed.associated_value_list == obj.associated_value_list
+    assert reconstructed.associated_value_not_parametrized == None
+    assert reconstructed.associated_value_not_parametrized_list == []

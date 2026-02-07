@@ -229,10 +229,23 @@ cabinetdao_drawers_association = Table(
 )
 
 
+class GenericClass_floatDAO(
+    Base, DataAccessObject[test.krrood_test.dataset.example_classes.GenericClass[float]]
+):
+
+    __tablename__ = "GenericClass_floatDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    value: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+
 class GenericClass_PositionDAO(
     Base,
     DataAccessObject[
-        test.krrood_test.dataset.example_classes.test.krrood_test.dataset.example_classes.GenericClass[
+        test.krrood_test.dataset.example_classes.GenericClass[
             test.krrood_test.dataset.example_classes.Position
         ]
     ],
@@ -253,24 +266,6 @@ class GenericClass_PositionDAO(
     value: Mapped[PositionDAO] = relationship(
         "PositionDAO", uselist=False, foreign_keys=[value_id], post_update=True
     )
-
-
-class GenericClass_floatDAO(
-    Base,
-    DataAccessObject[
-        test.krrood_test.dataset.example_classes.test.krrood_test.dataset.example_classes.GenericClass[
-            float
-        ]
-    ],
-):
-
-    __tablename__ = "GenericClass_floatDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    value: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
 
 class CallableWrapperDAO(
