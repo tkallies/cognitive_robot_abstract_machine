@@ -686,14 +686,15 @@ def test_algebra_sequentialplan(immutable_model_world):
     pose_1.orientation.z = None
     sp = SequentialPlan(
         context,
-        # MoveTorsoActionDescription(None),
+        MoveTorsoActionDescription(None),
         # MoveTorsoActionDescription([TorsoState.LOW, TorsoState.HIGH]),
-        # NavigateActionDescription(None),
+        NavigateActionDescription(None),
         # NavigateActionDescription(PoseStamped(PyCramPose(PyCramVector3(0, 0, 0.5)))),
+        MoveTorsoActionDescription(None),
         # MoveTorsoActionDescription(TorsoState.HIGH),
-        NavigateActionDescription(
-            pose_1,
-        ),
+        # NavigateActionDescription(
+        #     pose_1,
+        # ),
     )
 
     variables, simple_event = sp.parameterize_plan()

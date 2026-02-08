@@ -168,7 +168,6 @@ class DAOParameterizer:
         mapper = inspect(dao).mapper
 
         variables = []
-        events = []
         simple_event = SimpleEvent({})
 
         for wrapped_field in class_diagram.get_wrapped_class(original_class).fields:
