@@ -81,7 +81,7 @@ class JerkVariable(sm.FloatVariable):
         return self.dof._world.state[self.dof.id].jerk
 
 
-@dataclass(eq=False)
+@dataclass
 class DegreeOfFreedomLimits:
     """
     A class representing the limits of a degree of freedom.

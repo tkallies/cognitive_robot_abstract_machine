@@ -125,14 +125,14 @@ def test_sessionmaker():
 
 def test_degree_of_freedom_limits(session):
     lower = DerivativeMap()
-    lower.position = -2
-    lower.jerk = 1
+    lower.position = -2.0
+    lower.jerk = 1.0
 
     upper = DerivativeMap()
-    upper.position = 2
-    upper.velocity = 3
+    upper.position = 2.0
+    upper.velocity = 3.0
     obj = DegreeOfFreedomLimits(lower=lower, upper=upper)
     dao: DegreeOfFreedomLimitsDAO = to_dao(obj)
     reconstructed = dao.from_dao()
 
-    assert reconstructed == obj
+    assert obj == reconstructed

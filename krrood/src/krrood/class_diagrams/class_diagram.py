@@ -790,7 +790,7 @@ def make_specialized_dataclass(alias: _GenericAlias) -> Type:
     """
     Build a concrete dataclass for a fully specialized generic alias, e.g., GenericClass[float].
 
-    The class is intended for internal use only and should never be used directly.
+    The resulting class is intended for internal use only and should never be used directly.
 
     :param alias: The fully specialized generic alias to build a dataclass for.
     :return: A concrete dataclass corresponding to the provided alias.
