@@ -35,7 +35,12 @@ class VizMarkerPublisher(ModelChangeCallback):
 
     use_visuals: bool = field(kw_only=True, default=True)
     """
-    Whether to use the visual shapes of the bodies or the collision shapes.
+    Whether to use the visual shapes of the bodies.
+    """
+
+    use_collision: bool = field(kw_only=True, default=True)
+    """
+    Whether to use the collision shapes of the bodies.
     """
 
     markers: MarkerArray = field(init=False, default_factory=MarkerArray)
@@ -62,9 +67,14 @@ class VizMarkerPublisher(ModelChangeCallback):
         self.markers = MarkerArray()
         for body in self.world.bodies:
             marker_ns = str(body.name)
-            if self.use_visuals:
+            if self.use_visuals and self.use_collision:
+                if not body.visual.shapes:
+                    shapes = body.collision.shapes
+                else:
+                    shapes = body.visual.shapes
+            elif self.use_visuals:
                 shapes = body.visual.shapes
-            else:
+            elif self.use_collision:
                 shapes = body.collision.shapes
             for i, shape in enumerate(shapes):
                 marker = SemDTToRos2Converter.convert(shape)
