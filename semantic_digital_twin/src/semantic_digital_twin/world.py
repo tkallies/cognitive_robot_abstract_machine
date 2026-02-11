@@ -510,6 +510,8 @@ class World(HasSimulatorProperties):
     Manages disabled collision pairs in the world.
     """
 
+    _id: UUID = field(init=False, default_factory=uuid.uuid4)
+
     _model_manager: WorldModelManager = field(
         default_factory=WorldModelManager, repr=False
     )

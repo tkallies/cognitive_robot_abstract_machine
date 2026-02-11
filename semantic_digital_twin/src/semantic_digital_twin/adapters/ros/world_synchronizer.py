@@ -85,6 +85,7 @@ class Synchronizer(ABC):
         The metadata of the synchronizer which can be used to compare origins of messages.
         """
         return MetaData(
+            world_id=self.world._id,
             node_name=self.node.get_name(),
             process_id=os.getpid(),
         )
