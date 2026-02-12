@@ -26,7 +26,7 @@ from semantic_digital_twin.adapters.urdf import URDFParser
 
 from semantic_digital_twin.world_description.geometry import Box, Scale,Color
 
-from semantic_digital_twin.adapters.viz_marker import VizMarkerPublisher
+from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
 
 import rclpy
 
@@ -120,15 +120,6 @@ rt = RayTracer(tracy_world)
 rt.update_scene()
 rt.scene.show()
 
-with tracy_world.modify_world():
-    c_camera_box1 = Connection6DoF.create_with_dofs(world=tracy_world, parent=tracy_world.get_kinematic_structure_entity_by_name(PrefixedName("camera_link", "tracy")), child=body_box1)
-    tracy_world.remove_connection(c_root_box1)
-    tracy_world.add_connection(c_camera_box1)
-    c_camera_box1.origin = tm.from_xyz_rpy(*box1_start, reference_frame=tracy_world.get_kinematic_structure_entity_by_name(PrefixedName("camera_link", "tracy")), child_frame=body_box1)
-
-rt.update_scene()
-rt.scene.show()
-
 with simulated_robot:
     ctx = Context(world=tracy_world, robot=robot_view)
     SequentialPlan(
@@ -136,7 +127,7 @@ with simulated_robot:
         ParkArmsActionDescription([Arms.BOTH]),
         PickUpActionDescription(
             object_designator=body_box1,
-            grasp_description=GraspDescription(ApproachDirection.FRONT, VerticalAlignment.TOP),
+            grasp_description=GraspDescription(ApproachDirection.FRONT, VerticalAlignment.TOP, robot_view.left_arm.manipulator),
             arm=Arms.LEFT,
         ),
         PlaceActionDescription(
@@ -147,7 +138,7 @@ with simulated_robot:
         ParkArmsActionDescription([Arms.BOTH]),
         PickUpActionDescription(
             object_designator=body_box3,
-            grasp_description=GraspDescription(ApproachDirection.FRONT, VerticalAlignment.TOP),
+            grasp_description=GraspDescription(ApproachDirection.FRONT, VerticalAlignment.TOP, robot_view.left_arm.manipulator),
             arm=Arms.LEFT,
         ),
         PlaceActionDescription(
