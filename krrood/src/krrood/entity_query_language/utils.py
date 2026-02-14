@@ -20,6 +20,8 @@ try:
 except ImportError:
     Source = None
 
+import rustworkx as rx
+
 from typing_extensions import (
     Set,
     Any,

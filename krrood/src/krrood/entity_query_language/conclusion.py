@@ -1,39 +1,38 @@
 from __future__ import annotations
 
 from abc import ABC
-from dataclasses import dataclass, field
-from functools import lru_cache, cached_property
+from dataclasses import dataclass
+from functools import cached_property
 
-from typing_extensions import Any, Optional, List, Dict, Iterable
+from typing_extensions import Any, List, Iterable
 
-from .enums import RDREdge
-from .rxnode import ColorLegend
 from .symbolic import (
     SymbolicExpression,
     Variable,
     OperationResult,
-    ResultQuantifier,
     Selectable,
     Bindings,
 )
-from .utils import T
 
 
 @dataclass(eq=False)
 class Conclusion(SymbolicExpression, ABC):
     """
     Base for side-effecting/action clauses that adjust outputs (e.g., Set, Add).
-
-    :ivar var: The variable being affected by the conclusion.
-    :ivar value: The value or expression used by the conclusion.
     """
 
-    var: Selectable
+    variable: Selectable
+    """
+    The variable being affected by the conclusion.
+    """
     value: Any
+    """
+    The value added or set to the variable by the conclusion.
+    """
 
     def __post_init__(self):
 
-        self.var, self.value = self._update_children_(self.var, self.value)
+        self.variable, self.value = self._update_children_(self.variable, self.value)
 
         self.value._is_inferred_ = True
 
@@ -46,14 +45,16 @@ class Conclusion(SymbolicExpression, ABC):
     def _replace_child_field_(
         self, old_child: SymbolicExpression, new_child: SymbolicExpression
     ):
-        if self.var is old_child:
-            self.var = new_child
+        if self.variable is old_child:
+            self.variable = new_child
         elif self.value is old_child:
             self.value = new_child
 
     @cached_property
     def _all_variable_instances_(self) -> List[Selectable]:
-        return self.var._all_variable_instances_ + self.value._all_variable_instances_
+        return (
+            self.variable._all_variable_instances_ + self.value._all_variable_instances_
+        )
 
     @property
     def _name_(self) -> str:
@@ -62,11 +63,7 @@ class Conclusion(SymbolicExpression, ABC):
             if isinstance(self.value, Variable)
             else str(self.value)
         )
-        return f"{self.__class__.__name__}({self.var._var_._name_}, {value_str})"
-
-    @property
-    def _plot_color_(self) -> ColorLegend:
-        return ColorLegend("Conclusion", "#8cf2ff")
+        return f"{self.__class__.__name__}({self.variable._var_._name_}, {value_str})"
 
 
 @dataclass(eq=False)
@@ -78,12 +75,12 @@ class Set(Conclusion):
         sources: Bindings,
     ) -> Iterable[OperationResult]:
 
-        if self.var._binding_id_ not in sources:
-            parent_value = next(iter(self.var._evaluate_(sources, parent=self)))[
-                self.var._binding_id_
+        if self.variable._binding_id_ not in sources:
+            parent_value = next(iter(self.variable._evaluate_(sources, parent=self)))[
+                self.variable._binding_id_
             ]
-            sources[self.var._binding_id_] = parent_value
-        sources[self.var._binding_id_] = next(
+            sources[self.variable._binding_id_] = parent_value
+        sources[self.variable._binding_id_] = next(
             iter(self.value._evaluate_(sources, parent=self))
         )[self.value._binding_id_]
         yield OperationResult(sources, False, self)
@@ -101,5 +98,5 @@ class Add(Conclusion):
         v = next(iter(self.value._evaluate_(sources, parent=self)))[
             self.value._binding_id_
         ]
-        sources[self.var._binding_id_] = v
+        sources[self.variable._binding_id_] = v
         yield OperationResult(sources, False, self)

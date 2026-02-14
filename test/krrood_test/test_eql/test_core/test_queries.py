@@ -42,6 +42,7 @@ from krrood.entity_query_language.result_quantification_constraint import (
     AtMost,
     Range,
 )
+from krrood.entity_query_language.query_graph import QueryGraph
 from krrood.entity_query_language.symbolic import Product
 from krrood.entity_query_language.utils import chain_evaluate_variables
 from ...dataset.example_classes import VectorsWithProperty
@@ -289,7 +290,6 @@ def test_generate_with_and_or(handles_and_containers_world):
                 or_(contains(B.name, "Container"), contains(B.name, "1")),
             )
         )
-        # query._render_tree_()
         yield from query.evaluate()
 
     handles_and_container1 = list(generate_handles_and_container1())
@@ -310,7 +310,6 @@ def test_generate_with_multi_and(handles_and_containers_world):
             )
         )
 
-        # query._render_tree_()
         yield from query.evaluate()
 
     all_solutions = list(generate_container1())
@@ -407,8 +406,6 @@ def test_generate_with_more_than_one_source_optimized(handles_and_containers_wor
             PC.child == FC.parent,
         )
     )
-
-    # query._render_tree_()
 
     all_solutions = list(query.evaluate())
     assert (
@@ -522,9 +519,6 @@ def test_not_and_or(handles_and_containers_world):
         h.name not in ["Handle1", "Container1"]
         for h in all_not_handle1_and_not_container1
     ), "All generated items should satisfy query"
-    # print(f"\nCache Search Count = {cache_search_count.values}")
-    # print(f"\nCache Match Count = {cache_match_count.values}")
-    # query._render_tree_()
 
 
 def test_empty_list_literal(handles_and_containers_world):
@@ -1074,12 +1068,11 @@ def test_order_by_not_evaluated_variable(handles_and_containers_world):
     )
 
 
-@pytest.mark.skip(reason="Infinite loop detected")
 def test_ordering_the_query_by_the_query_itself(handles_and_containers_world):
     body = variable(Body, domain=handles_and_containers_world.bodies)
     query = entity(body).where(contains(body.name, "Handle"))
     ordered_query = an(query.ordered_by(query.name[-1]))
-    ordered_query.visualize()
+    # QueryGraph(ordered_query).visualize()
     assert list(ordered_query.evaluate()) == sorted(
         [b for b in handles_and_containers_world.bodies if "Handle" in b.name],
         key=lambda b: b.name[-1],

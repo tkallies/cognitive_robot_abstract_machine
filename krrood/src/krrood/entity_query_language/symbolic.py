@@ -46,7 +46,6 @@ from .failures import (
     UnsupportedNegation,
     GreaterThanExpectedNumberOfSolutions,
     LessThanExpectedNumberOfSolutions,
-    InvalidEntityType,
     UnSupportedOperand,
     NonPositiveLimitValue,
     InvalidChildType,
@@ -64,10 +63,8 @@ from .result_quantification_constraint import (
     ResultQuantificationConstraint,
     Exactly,
 )
-from .rxnode import RWXNode, ColorLegend
 from .symbol_graph import SymbolGraph
 from .utils import (
-    IDGenerator,
     is_iterable,
     generate_combinations,
     make_list,
@@ -85,10 +82,6 @@ from ..class_diagrams.wrapped_field import WrappedField
 if TYPE_CHECKING:
     from .conclusion import Conclusion
     from .entity import ConditionType
-
-id_generator = IDGenerator()
-
-RWXNode.enclosed_name = "Selected Variable"
 
 Bindings = Dict[int, Any]
 """
@@ -208,10 +201,6 @@ class SymbolicExpression(ABC):
     The current parent symbolic expression of this expression during evaluation. Since a node can have multiple parents,
     this attribute is used to track the current parent that is being evaluated.
     """
-    _plot_color__: Optional[ColorLegend] = field(default=None, init=False, repr=False)
-    """
-    The color to use for plotting the node of this symbolic expression.
-    """
 
     @lru_cache
     def _get_expression_by_id_(self, id_: int) -> SymbolicExpression:
@@ -267,60 +256,6 @@ class SymbolicExpression(ABC):
                 yield result
                 if res_num == limit:
                     return
-
-    def visualize(
-        self,
-        figsize=(35, 30),
-        node_size=7000,
-        font_size=25,
-        spacing_x: float = 4,
-        spacing_y: float = 4,
-        layout: str = "tidy",
-        edge_style: str = "orthogonal",
-        label_max_chars_per_line: Optional[int] = 13,
-    ):
-        """
-        Visualize the query graph, for arguments' documentation see `rustworkx_utils.RWXNode.visualize`.
-        """
-        import rustworkx as rx
-
-        graph = rx.PyDAG()
-        all_nodes = {}
-
-        def build_subgraph(expression: SymbolicExpression) -> RWXNode:
-            if expression in all_nodes:
-                return all_nodes[expression]
-            node = RWXNode(
-                expression._name_, graph, color=expression._plot_color_, data=expression
-            )
-            all_nodes[expression] = node
-            if isinstance(expression, ResultQuantifier):
-                node.wrap_subtree = True
-            for child in expression._children_:
-                child_node = build_subgraph(child)
-                if isinstance(expression, Product) and isinstance(
-                    expression._parents_[0], QueryObjectDescriptor
-                ):
-                    if child._binding_id_ in [
-                        v._binding_id_
-                        for v in expression._parents_[0]._selected_variables_
-                    ]:
-                        child_node.enclosed = True
-                child_node.parent = node
-            return node
-
-        node = build_subgraph(self._root_)
-
-        node.visualize(
-            figsize=figsize,
-            node_size=node_size,
-            font_size=font_size,
-            spacing_x=spacing_x,
-            spacing_y=spacing_y,
-            layout=layout,
-            edge_style=edge_style,
-            label_max_chars_per_line=label_max_chars_per_line,
-        )
 
     def _replace_child_(
         self, old_child: SymbolicExpression, new_child: SymbolicExpression
@@ -577,22 +512,6 @@ class SymbolicExpression(ABC):
         """
         ...
 
-    @property
-    def _plot_color_(self) -> ColorLegend:
-        """
-        :return: The color legend for this symbolic expression.
-        """
-        return self._plot_color__
-
-    @_plot_color_.setter
-    def _plot_color_(self, value: ColorLegend):
-        """
-        Set the color legend for this symbolic expression.
-
-        :param value: The new color legend for this symbolic expression.
-        """
-        self._plot_color__ = value
-
     def __and__(self, other):
         return AND(self, other)
 
@@ -761,20 +680,7 @@ class BinaryExpression(SymbolicExpression, ABC):
 
 
 @dataclass(eq=False, repr=False)
-class AbstractDataSource(SymbolicExpression, ABC):
-    """Base class for all data-providing symbolic expressions."""
-
-    @property
-    def _name_(self) -> str:
-        return self.__class__.__name__
-
-    @property
-    def _plot_color_(self) -> ColorLegend:
-        return ColorLegend("DataSource", "#17becf")
-
-
-@dataclass(eq=False, repr=False)
-class Product(AbstractDataSource, MultiArityExpression):
+class Product(MultiArityExpression):
     """
     A symbolic operation that evaluates its children in nested sequence, passing bindings from one to the next such that
     each binding has a value from each child expression. It represents a cartesian product of all child expressions.
@@ -797,7 +703,7 @@ class Product(AbstractDataSource, MultiArityExpression):
 
 
 @dataclass(eq=False, repr=False)
-class Filter(AbstractDataSource, DerivedExpression, ABC):
+class Filter(DerivedExpression, ABC):
     """
     Data source that evaluates the truth value for each data point according to a condition expression and filters out
     the data points that do not satisfy the condition.
@@ -1226,14 +1132,6 @@ class Aggregator(UnaryExpression, CanBehaveLikeAVariable[T], ABC):
         """
         ...
 
-    @property
-    def _plot_color_(self) -> ColorLegend:
-        return ColorLegend("Aggregator", "#F54927")
-
-    @_plot_color_.setter
-    def _plot_color_(self, value: ColorLegend):
-        self._plot_color__ = value
-
 
 @dataclass(eq=False, repr=False)
 class Count(Aggregator[T]):
@@ -1430,14 +1328,6 @@ class ResultQuantifier(UnaryExpression, DerivedExpression, ABC):
             name += f"({self._quantification_constraint_})"
         return name
 
-    @property
-    def _plot_color_(self) -> ColorLegend:
-        return ColorLegend("ResultQuantifier", "#9467bd")
-
-    @_plot_color_.setter
-    def _plot_color_(self, value: ColorLegend):
-        self._plot_color__ = value
-
 
 class UnificationDict(UserDict):
     """
@@ -1495,7 +1385,7 @@ A dictionary for grouped bindings which maps a group key to its corresponding bi
 
 
 @dataclass(eq=False, repr=False)
-class GroupedBy(AbstractDataSource, UnaryExpression):
+class GroupedBy(UnaryExpression):
     """
     Represents a group-by operation in the entity query language. This operation groups the results of a query by
     specific variables. This is useful for aggregating results separately for each group.
@@ -2094,6 +1984,8 @@ class QueryObjectDescriptor(UnaryExpression, ABC):
         self._ordered_by_builder_ = OrderedByBuilder(
             self, variable, descending=descending, key=key
         )
+        # build ordered by expression; this is fine outside the build() as ordered by is the last operation.
+        _ = self._ordered_by_builder_.expression
         return self
 
     def distinct(
@@ -2183,11 +2075,21 @@ class QueryObjectDescriptor(UnaryExpression, ABC):
 
         return self
 
-    @cached_property
+    @property
     def _expression_(self) -> SymbolicExpression:
+        """
+        The expression representing the query (without quantification), built by wiring the operations together.
+        """
+        self.build()
         if self._ordered_by_builder_ is not None:
             return self._ordered_by_builder_.expression
         return self
+
+    @property
+    def _ordered_by_expression_(self) -> Optional[OrderedByBuilder]:
+        return (
+            self._ordered_by_builder_.expression if self._ordered_by_builder_ else None
+        )
 
     @cached_property
     def _selected_not_inferred_variables_(self) -> Tuple[SymbolicExpression, ...]:
@@ -2389,10 +2291,6 @@ class QueryObjectDescriptor(UnaryExpression, ABC):
 
     def _invert_(self):
         raise UnsupportedNegation(self.__class__)
-
-    @property
-    def _plot_color_(self) -> ColorLegend:
-        return ColorLegend("ObjectDescriptor", "#d62728")
 
     @property
     def _name_(self) -> str:
@@ -2699,17 +2597,6 @@ class Variable(CanBehaveLikeAVariable[T]):
     def _is_iterable_(self):
         return is_iterable(next(iter(self._domain_), None))
 
-    @property
-    def _plot_color_(self) -> ColorLegend:
-        if self._plot_color__:
-            return self._plot_color__
-        else:
-            return ColorLegend("Variable", "cornflowerblue")
-
-    @_plot_color_.setter
-    def _plot_color_(self, value: ColorLegend):
-        self._plot_color__ = value
-
 
 @dataclass(eq=False, init=False, repr=False)
 class Literal(Variable[T]):
@@ -2740,13 +2627,6 @@ class Literal(Variable[T]):
                 else:
                     name = type(original_data).__name__
         super().__init__(_name__=name, _type_=type_, _domain_source_=data)
-
-    @property
-    def _plot_color_(self) -> ColorLegend:
-        if self._plot_color__:
-            return self._plot_color__
-        else:
-            return ColorLegend("Literal", "#949292")
 
 
 @dataclass(eq=False, repr=False)
@@ -2781,13 +2661,6 @@ class Concatenate(MultiArityExpression, CanBehaveLikeAVariable[T]):
                     var_val.is_false,
                     self,
                 )
-
-    @property
-    def _plot_color_(self) -> ColorLegend:
-        if self._plot_color__:
-            return self._plot_color__
-        else:
-            return ColorLegend("Concatenate", "#949292")
 
     @property
     def _name_(self):
@@ -2856,17 +2729,6 @@ class DomainMapping(UnaryExpression, CanBehaveLikeAVariable[T], ABC):
         Apply the domain mapping to a symbolic value.
         """
         pass
-
-    @property
-    def _plot_color_(self) -> ColorLegend:
-        if self._plot_color__:
-            return self._plot_color__
-        else:
-            return ColorLegend("DomainMapping", "#8FC7B8")
-
-    @_plot_color_.setter
-    def _plot_color_(self, value: ColorLegend):
-        self._plot_color__ = value
 
 
 @dataclass(eq=False, repr=False)
@@ -3111,10 +2973,6 @@ class Comparator(BinaryExpression):
         else:
             return self.left, self.right
 
-    @property
-    def _plot_color_(self) -> ColorLegend:
-        return ColorLegend("Comparator", "#ff7f0e")
-
 
 @dataclass(eq=False, repr=False)
 class LogicalOperator(SymbolicExpression, ABC):
@@ -3127,10 +2985,6 @@ class LogicalOperator(SymbolicExpression, ABC):
     @property
     def _name_(self):
         return self.__class__.__name__
-
-    @property
-    def _plot_color_(self) -> ColorLegend:
-        return ColorLegend("LogicalOperator", "#2ca02c")
 
 
 @dataclass(eq=False, repr=False)

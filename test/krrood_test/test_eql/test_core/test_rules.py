@@ -3,6 +3,7 @@ from krrood.entity_query_language.entity import variable, entity, and_, inferenc
 from krrood.entity_query_language.entity_result_processors import an
 from krrood.entity_query_language.predicate import HasType
 from krrood.entity_query_language.rule import refinement, alternative, next_rule
+from krrood.entity_query_language.query_graph import QueryGraph
 from ...dataset.semantic_world_like_classes import (
     Container,
     Handle,
@@ -33,7 +34,7 @@ def test_generate_drawers_from_direct_condition(handles_and_containers_world):
     with condition:
         Add(drawers, inference(Drawer)(handle=handle, container=container))
 
-    condition.visualize()
+    # QueryGraph(condition).visualize()
 
     assert condition._conditions_root_ is condition
 
@@ -68,7 +69,7 @@ def test_generate_drawers_from_query(handles_and_containers_world):
     with query:
         Add(drawers, inference(Drawer)(handle=handle, container=container))
 
-    query.visualize()
+    # QueryGraph(query).visualize()
 
     solutions = query.evaluate()
     all_solutions = list(solutions)
@@ -101,8 +102,7 @@ def test_rule_tree_with_a_refinement(doors_and_drawers_world):
         with refinement(body.size > 1):
             Add(drawers_and_doors, inference(Door)(handle=handle, body=body))
 
-    query.visualize()
-    # query._render_tree_()
+    # QueryGraph(query).visualize()
 
     all_solutions = list(query.evaluate())
     assert len(all_solutions) == 3, "Should generate 1 drawer and 1 door."
@@ -145,7 +145,6 @@ def test_rule_tree_with_multiple_refinements(doors_and_drawers_world):
                     inference(Wardrobe)(handle=handle, body=body, container=container),
                 )
 
-    # query._render_tree_()
     all_solutions = list(query.evaluate())
     assert len(all_solutions) == 3, "Should generate 1 drawer, 1 door and 1 wardrobe."
     assert isinstance(all_solutions[0], Door)
@@ -181,7 +180,7 @@ def test_rule_tree_with_an_alternative(doors_and_drawers_world):
         ):
             Add(views, inference(Door)(handle=handle, body=body))
 
-    query.visualize()
+    # QueryGraph(query).visualize()
 
     all_solutions = list(query.evaluate())
     assert len(all_solutions) == 4, "Should generate 3 drawers, 1 door"
@@ -232,8 +231,6 @@ def test_rule_tree_with_multiple_alternatives(doors_and_drawers_world):
                 views,
                 inference(Wardrobe)(handle=handle, body=body, container=container),
             )
-
-    # query._render_tree_()
 
     all_solutions = list(query.evaluate())
     assert len(all_solutions) == 3, "Should generate 1 drawer, 1 door and 1 wardrobe."
@@ -294,8 +291,6 @@ def test_rule_tree_with_multiple_alternatives_optimized(doors_and_drawers_world)
                 ),
             )
 
-    # query._render_tree_()
-
     all_solutions = list(query.evaluate())
     assert len(all_solutions) == 3, "Should generate 1 drawer, 1 door and 1 wardrobe."
     expected_solution_set = {
@@ -345,8 +340,6 @@ def test_rule_tree_with_multiple_alternatives_better_rule_tree(doors_and_drawers
             revolute_connection.parent == body, revolute_connection.child == handle
         ):
             Add(views, inference(Door)(handle=handle, body=body))
-
-    # query._render_tree_()
 
     all_solutions = list(query.evaluate())
     assert len(all_solutions) == 3, "Should generate 1 drawer, 1 door and 1 wardrobe."
@@ -408,7 +401,7 @@ def test_rule_tree_with_multiple_alternatives_better_rule_tree_optimized(
                 ),
             )
 
-    query.visualize()
+    # QueryGraph(query).visualize()
 
     all_solutions = list(query.evaluate())
     assert len(all_solutions) == 3, "Should generate 1 drawer, 1 door and 1 wardrobe."

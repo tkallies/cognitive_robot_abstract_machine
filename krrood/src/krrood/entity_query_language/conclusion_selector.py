@@ -7,7 +7,6 @@ from typing_extensions import Dict, Optional, Iterable, Any
 
 from .cache_data import SeenSet
 from .conclusion import Conclusion
-from .rxnode import ColorLegend
 from .symbolic import (
     SymbolicExpression,
     ElseIf,
@@ -57,10 +56,6 @@ class ConclusionSelector(LogicalBinaryOperator, ABC):
         if not self.concluded_before[not self._is_false_].check(required_output):
             self._conclusion_.update(conclusions)
             self.concluded_before[not self._is_false_].add(required_output)
-
-    @property
-    def _plot_color_(self) -> ColorLegend:
-        return ColorLegend("ConclusionSelector", "#eded18")
 
 
 @dataclass(eq=False)

@@ -184,7 +184,7 @@ def test_having_with_max(handles_and_containers_world):
         .grouped_by(cabinet)
         .having(drawer_count > 1)
     )
-    # query.visualize()
+    # QueryGraph(query).visualize()
     results = list(query.evaluate())
     assert len(results) == 1
 
@@ -420,7 +420,7 @@ def test_average_with_condition(departments_and_employees):
         .grouped_by(department)
         .having(avg_salary > 20000)
     )
-    # query.visualize()
+    # QueryGraph(query).visualize()
     results = list(query.evaluate())
     assert len(results) == 1
     assert results[0][department] == next(
@@ -477,7 +477,7 @@ def test_having_node_hierarchy(departments_and_employees):
         set_of(department, avg_salary).grouped_by(department).having(avg_salary > 20000)
     ).build()
 
-    # query.visualize()
+    # QueryGraph(query).visualize()
 
     # Graph hierarchy check
     assert isinstance(query._child_, Product)
