@@ -245,7 +245,13 @@ class SymbolicExpression(ABC):
         """
         Evaluate and return the results as a list.
         """
-        return list(self.evaluate())
+        return make_list(self.evaluate())
+
+    def first(self):
+        """
+        Evaluate and return the first result of the query object descriptor.
+        """
+        return next(self.evaluate())
 
     def evaluate(
         self,
@@ -1943,14 +1949,6 @@ class QueryObjectDescriptor(UnaryExpression, ABC):
             return method(self, *args, **kwargs)
 
         return wrapper
-
-    def tolist(self) -> List:
-        """
-        Map the results of the query object descriptor to a list of the selected variable values.
-
-        :return: A list of the selected variable values.
-        """
-        return list(self.evaluate())
 
     def evaluate(self, limit: Optional[int] = None) -> Iterator:
         """

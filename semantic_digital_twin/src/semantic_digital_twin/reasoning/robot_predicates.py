@@ -110,7 +110,7 @@ def blocking(
             contains(r.bodies, tip),
         )
     )
-    return robot_in_collision(robot.evaluate(), [])
+    return robot_in_collision(robot.first(), [])
 
 
 def is_body_in_gripper(

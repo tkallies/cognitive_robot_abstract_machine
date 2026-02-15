@@ -1163,3 +1163,11 @@ def test_subquery_independence():
     query = an(entity(var1).where(var1 != an(entity(var1).where(var1 == 2))))
     # QueryGraph(query.build()).visualize()
     assert query.tolist() == [1, 4, 3]
+
+
+def test_first():
+    var1 = variable(int, [1, 2, 3])
+    first = the(entity(var1)).first()
+    assert first == 1
+    first = an(entity(var1)).first()
+    assert first == 1
