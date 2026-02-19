@@ -23,7 +23,7 @@ class PerceptionClientSingle():
         self.req = GetObjPoses.Request()
         self.transform = None
 
-    def update_obj_positions(self, poses, world: World):
+    def update_obj_positions(self, poses: list[tuple[str, geometry_msgs.msg.PoseStamped]], world: World):
         for pose in poses:
             obj_name = pose[0]
             obj_pose = pose[1]
@@ -32,7 +32,7 @@ class PerceptionClientSingle():
                                                                  obj_pose.pose.orientation.y, obj_pose.pose.orientation.z,
                                                                  obj_pose.pose.orientation.w,
                                                                  world.get_kinematic_structure_entity_by_name(
-                                                                     PrefixedName("camera_link", "tracy")))
+                                                                     PrefixedName(obj_pose.header.frame_id, "tracy")))
 
             with world.modify_world():
                 world.get_connection_by_name(PrefixedName("map_T_" + obj_name, prefix)).origin = world.transform(
