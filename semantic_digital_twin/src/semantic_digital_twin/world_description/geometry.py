@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import copy
 import itertools
 import os
 import tempfile
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass, field, fields
-from functools import cached_property, lru_cache
+from functools import cached_property
 
 import numpy as np
 import trimesh
@@ -21,6 +20,7 @@ from typing_extensions import Optional, List, Dict, Any, Self, Tuple, TYPE_CHECK
 from krrood.adapters.exceptions import JSON_TYPE_NAME
 from krrood.adapters.json_serializer import SubclassJSONSerializer, to_json, from_json
 from ..datastructures.variables import SpatialVariables
+from ..mixin import HasSimulatorProperties
 from ..spatial_types import HomogeneousTransformationMatrix, Point3, Vector3
 from ..utils import IDGenerator
 
@@ -168,9 +168,12 @@ class Scale:
         max_point = Point3(self.x / 2, self.y / 2, self.z / 2)
         return BoundingBox.from_min_max(min_point, max_point)
 
+    def to_np(self) -> np.ndarray:
+        return np.array([self.x, self.y, self.z])
+
 
 @dataclass
-class Shape(ABC, SubclassJSONSerializer):
+class Shape(ABC, SubclassJSONSerializer, HasSimulatorProperties):
     """
     Base class for all shapes in the world.
     """
@@ -306,6 +309,17 @@ class Mesh(Shape, ABC):
         mesh.visual.material = SimpleMaterial(name=material_name, image=image)
         return mesh
 
+    def scale_mesh(self, scale: Scale) -> trimesh.Trimesh:
+        """
+        Scales the mesh according to the given scale.
+
+        :param scale: The scale of the mesh.
+        :return: A scaled mesh object.
+        """
+        copy_mesh = deepcopy(self.mesh)
+        copy_mesh.apply_scale(scale.to_np())
+        return copy_mesh
+
 
 @dataclass(eq=False)
 class FileMesh(Mesh):
@@ -324,6 +338,7 @@ class FileMesh(Mesh):
         The mesh object.
         """
         mesh = trimesh.load_mesh(self.filename)
+        mesh.apply_scale(self.scale.to_np())
         mesh.visual.vertex_colors = trimesh.visual.color.to_rgba(self.color.to_rgba())
         return mesh
 
@@ -377,6 +392,9 @@ class TriangleMesh(Mesh):
     """
     The loaded mesh object.
     """
+
+    def __post_init__(self):
+        self.mesh.apply_scale(self.scale.to_np())
 
     @property
     def file_name(self) -> str:
@@ -502,12 +520,12 @@ class TriangleMesh(Mesh):
         if thickness_padding > 0:
             P_aug = np.vstack(
                 [
-                    points + thickness_padding * unit_vector_normal,
-                    points - thickness_padding * unit_vector_normal,
+                    centered_points + thickness_padding * unit_vector_normal,
+                    centered_points - thickness_padding * unit_vector_normal,
                 ]
             )
         else:
-            P_aug = points
+            P_aug = centered_points
 
         hull = trimesh.points.PointCloud(P_aug).convex_hull
         hull.remove_unreferenced_vertices()
@@ -795,7 +813,10 @@ class BoundingBox:
         """
         Check if the bounding box contains a point.
         """
-        x, y, z = (float(point.x), float(point.y), float(point.z))
+        point_in_bb = point.reference_frame._world.transform(
+            point, self.origin.reference_frame
+        )
+        x, y, z = (float(point_in_bb.x), float(point_in_bb.y), float(point_in_bb.z))
         return self.simple_event.contains((x, y, z))
 
     @classmethod
@@ -862,7 +883,9 @@ class BoundingBox:
 
     @classmethod
     def from_mesh(
-        cls, mesh: trimesh.Trimesh, origin: HomogeneousTransformationMatrix
+        cls,
+        mesh: trimesh.Trimesh,
+        origin: HomogeneousTransformationMatrix,
     ) -> Self:
         """
         Create a bounding box from a trimesh object.
@@ -870,6 +893,7 @@ class BoundingBox:
         :param origin: The origin of the bounding box.
         :return: The bounding box.
         """
+
         bounds = mesh.bounds
         return cls(
             bounds[0][0],
