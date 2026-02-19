@@ -8,7 +8,7 @@ from pycram.pose_validator import (
 def test_pose_reachable(immutable_model_world):
     world, robot_view, context = immutable_model_world
 
-    pose = PoseStamped.from_list([1.65, 1.4, 1], frame=world.root)
+    pose = PoseStamped.from_list([1.7, 1.4, 1], frame=world.root)
 
     assert reachability_validator(
         pose, world.get_body_by_name("r_gripper_tool_frame"), robot_view, world
