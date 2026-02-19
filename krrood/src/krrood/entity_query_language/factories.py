@@ -80,7 +80,7 @@ def match(
 
 def match_variable(
     type_: Union[Type[T], Selectable[T]], domain: DomainType
-) -> Union[Type[T], An[T], CanBehaveLikeAVariable[T], MatchVariable[T]]:
+) -> Union[T, CanBehaveLikeAVariable[T], MatchVariable[T]]:
     """
     Same as :py:func:`krrood.entity_query_language.match.match` but with a domain to use for the variable created
      by the match.
@@ -438,9 +438,7 @@ def construct_new_conditions_root_for_alternative_or_next(
             )
     return new_conditions_root
 
-
 # %% Aggregators
-
 
 def max(
     variable: Selectable[T],
