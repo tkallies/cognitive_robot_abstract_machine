@@ -34,7 +34,7 @@ def immutable_model_world(pr2_apartment_world):
     pr2 = pr2_apartment_world.get_semantic_annotations_by_type(PR2)[0]
     state = deepcopy(world.state.data)
     yield world, pr2, Context(world, pr2)
-    world.state.data = state
+    world.state.data[:] = state
 
 
 @pytest.fixture
