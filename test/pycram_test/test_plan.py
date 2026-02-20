@@ -669,12 +669,12 @@ def test_pause_plan(immutable_model_world):
     )
 
 
-def test_algebra_sequential_plan(immutable_model_world):
+def test_algebra_sequential_plan(mutable_model_world):
     """
     Parameterize a SequentialPlan using krrood parameterizer, create a fully-factorized distribution and
     assert the correctness of sampled values after conditioning and truncation.
     """
-    world, robot_view, context = immutable_model_world
+    world, robot_view, context = mutable_model_world
 
     target_location = PoseStamped.from_list([..., ..., 0], [0, 0, 0, 1], frame=None)
 
