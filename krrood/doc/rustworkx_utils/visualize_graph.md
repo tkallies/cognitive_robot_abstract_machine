@@ -17,12 +17,14 @@ Below is an example of how to visualize a rooted directed acyclic rustworkx grap
 
 ```{code-cell} ipython3
 from krrood.rustworkx_utils import RWXNode, ColorLegend
+import rustworkx as rx
 
 # Build a small DAG using RWXNode
-root = RWXNode("Root", enclosed=True)
-a = RWXNode("A", color=ColorLegend(name="A", color="red"))
-b = RWXNode("B", color=ColorLegend(name="B", color="green"))
-c = RWXNode("C", color=ColorLegend(name="C", color="blue"))
+graph = rx.PyDAG()
+root = RWXNode("Root", graph=graph, enclosed=True)
+a = RWXNode("A", graph=graph, color=ColorLegend(name="A", color="red"))
+b = RWXNode("B", graph=graph, color=ColorLegend(name="B", color="green"))
+c = RWXNode("C", graph=graph, color=ColorLegend(name="C", color="blue"))
 
 # Establish primary parent relationships
 a.parent = root
