@@ -51,10 +51,33 @@ except ImportError as e:
 import requests
 from anytree import Node, RenderTree, PreOrderIter
 from sqlalchemy import MetaData, inspect as sql_inspect
-from sqlalchemy.orm import Mapped, registry, class_mapper, DeclarativeBase as SQLTable, Session
+from sqlalchemy.orm import (
+    Mapped,
+    registry,
+    class_mapper,
+    DeclarativeBase as SQLTable,
+    Session,
+)
 from tabulate import tabulate
-from typing_extensions import Callable, Set, Any, Type, Dict, TYPE_CHECKING, get_type_hints, \
-    get_origin, get_args, Tuple, Optional, List, Union, Self, ForwardRef, Iterable, Sequence
+from typing_extensions import (
+    Callable,
+    Set,
+    Any,
+    Type,
+    Dict,
+    TYPE_CHECKING,
+    get_type_hints,
+    get_origin,
+    get_args,
+    Tuple,
+    Optional,
+    List,
+    Union,
+    Self,
+    ForwardRef,
+    Iterable,
+    Sequence,
+)
 
 if TYPE_CHECKING:
     from .datastructures.case import Case
@@ -110,16 +133,20 @@ def fill_in_missing_kwargs(func: Callable, **kwargs) -> Dict[str, Any]:
     :param kwargs: The kwargs to complete.
     :return: The complete kwargs.
     """
-    original_kwargs = {pname: p for pname, p in inspect.signature(func).parameters.items() if
-                       p.default != inspect._empty}
+    original_kwargs = {
+        pname: p
+        for pname, p in inspect.signature(func).parameters.items()
+        if p.default != inspect._empty
+    }
     for og_kwarg in original_kwargs:
         if og_kwarg not in kwargs:
             kwargs[og_kwarg] = original_kwargs[og_kwarg].default
     return kwargs
 
 
-def get_and_import_python_modules_in_a_package(file_paths: List[str],
-                                               parent_package_name: Optional[str] = None) -> List[Optional[ModuleType]]:
+def get_and_import_python_modules_in_a_package(
+    file_paths: List[str], parent_package_name: Optional[str] = None
+) -> List[Optional[ModuleType]]:
     """
     :param file_paths: The paths to the python files to import.
     :param parent_package_name: The name of the parent package to use for relative imports.
@@ -133,8 +160,11 @@ def get_and_import_python_modules_in_a_package(file_paths: List[str],
         for file_name in file_names
     ]
     modules = [
-        importlib.import_module(module_import_path, package=parent_package_name)
-        if os.path.exists(file_paths[i]) else None
+        (
+            importlib.import_module(module_import_path, package=parent_package_name)
+            if os.path.exists(file_paths[i])
+            else None
+        )
         for i, module_import_path in enumerate(module_import_paths)
     ]
     for module in modules:
@@ -143,8 +173,11 @@ def get_and_import_python_modules_in_a_package(file_paths: List[str],
     return modules
 
 
-def get_and_import_python_module(python_file_path: str, package_import_path: Optional[str] = None,
-                                 parent_package_name: Optional[str] = None) -> ModuleType:
+def get_and_import_python_module(
+    python_file_path: str,
+    package_import_path: Optional[str] = None,
+    parent_package_name: Optional[str] = None,
+) -> ModuleType:
     """
     :param python_file_path: The path to the python file to import.
     :param package_import_path: The import path of the package that contains the python file.
@@ -155,7 +188,9 @@ def get_and_import_python_module(python_file_path: str, package_import_path: Opt
         package_path = dirname(python_file_path)
         package_import_path = get_import_path_from_path(package_path)
     file_name = Path(python_file_path).name.replace(".py", "")
-    module_import_path = f"{package_import_path}.{file_name}" if package_import_path else file_name
+    module_import_path = (
+        f"{package_import_path}.{file_name}" if package_import_path else file_name
+    )
     module = importlib.import_module(module_import_path, package=parent_package_name)
     importlib.reload(module)
     return module
@@ -168,12 +203,12 @@ def str_to_snake_case(snake_str: str) -> str:
     :param snake_str: The string to convert.
     :return: The converted string.
     """
-    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', snake_str)
-    s1 = re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+    s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", snake_str)
+    s1 = re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
     # remove redundant underscores
-    s1 = re.sub(r'_{2,}', '_', s1)
+    s1 = re.sub(r"_{2,}", "_", s1)
     # remove leading and trailing underscores
-    s1 = re.sub(r'^_|_$', '', s1)
+    s1 = re.sub(r"^_|_$", "", s1)
     return s1
 
 
@@ -199,26 +234,34 @@ def get_origin_type_of_function_output(func: Callable) -> Optional[Type]:
     """
     origin_type: Optional[Type] = None
     try:
-        origin_type = get_origin(get_type_hints(func)['return'])
+        origin_type = get_origin(get_type_hints(func)["return"])
     except NameError:
         return_annotation = inspect.signature(func).return_annotation
-        if any(return_annotation.startswith(t) for t in ['List', 'list', 'typing.List']):
+        if any(
+            return_annotation.startswith(t) for t in ["List", "list", "typing.List"]
+        ):
             origin_type = list
-        elif any(return_annotation.startswith(t) for t in ['Type', 'type', 'typing.Type']):
+        elif any(
+            return_annotation.startswith(t) for t in ["Type", "type", "typing.Type"]
+        ):
             origin_type = type
     if origin_type:
         origin_type = get_type_from_type_hint(origin_type)
     return origin_type
 
 
-def get_arg_type_of_function_output(func: Callable, output_type: Type, *func_args, package_name: Optional[str] = None):
+def get_arg_type_of_function_output(
+    func: Callable, output_type: Type, *func_args, package_name: Optional[str] = None
+):
     if output_type is Self and len(func_args) > 0:
         func_class = get_method_class_if_exists(func, *func_args)
         if func_class is not None:
             return func_class
         else:
-            raise ValueError(f"The function {func} is not a method of a class,"
-                             f" and the output type is {Self}.")
+            raise ValueError(
+                f"The function {func} is not a method of a class,"
+                f" and the output type is {Self}."
+            )
     elif type(output_type) is str:
         # If the type is a string, it might be a forward reference or a type hint.
         # We can try to resolve it using the current module's globals.
@@ -233,13 +276,15 @@ def get_arg_type_of_function_output(func: Callable, output_type: Type, *func_arg
                 except (ImportError, KeyError):
                     pass
             try:
-                module_name = '.'.join(output_type.split('.')[:-1])
+                module_name = ".".join(output_type.split(".")[:-1])
                 if package_name:
                     module_name = f"{package_name}.{module_name}"
-                type_name = output_type.split('.')[-1]
+                type_name = output_type.split(".")[-1]
                 return importlib.import_module(module_name).__dict__[type_name]
             except (ImportError, KeyError):
-                raise ValueError(f"Output type '{output_type}' could not be resolved in the current scope.")
+                raise ValueError(
+                    f"Output type '{output_type}' could not be resolved in the current scope."
+                )
     else:
         return output_type
 
@@ -254,8 +299,11 @@ def get_imports_from_scope(scope: Dict[str, Any]) -> List[str]:
     return get_imports_from_types(list(scope.values()))
 
 
-def extract_imports(file_path: Optional[str] = None, tree: Optional[ast.AST] = None,
-                    package_name: Optional[str] = None) -> Dict[str, Any]:
+def extract_imports(
+    file_path: Optional[str] = None,
+    tree: Optional[ast.AST] = None,
+    package_name: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Extract imports from a Python file or an AST tree.
 
@@ -277,7 +325,9 @@ def extract_imports(file_path: Optional[str] = None, tree: Optional[ast.AST] = N
                 module_name = alias.name
                 asname = alias.asname or alias.name
                 try:
-                    scope[asname] = importlib.import_module(module_name, package=package_name)
+                    scope[asname] = importlib.import_module(
+                        module_name, package=package_name
+                    )
                 except ImportError as e:
                     logger.warning(f"Could not import {module_name}: {e}")
         elif isinstance(node, ast.ImportFrom):
@@ -287,34 +337,54 @@ def extract_imports(file_path: Optional[str] = None, tree: Optional[ast.AST] = N
                 asname = alias.asname or name
                 try:
                     if node.level > 0:  # Handle relative imports
-                        package_name = get_import_path_from_path(Path(os.path.join(file_path, *['..'] * node.level)).resolve())
-                    if package_name is not None and node.level > 0:  # Handle relative imports
-                        module_rel_path = Path(os.path.join(file_path, *['..'] * node.level, module_name)).resolve()
+                        package_name = get_import_path_from_path(
+                            Path(
+                                os.path.join(file_path, *[".."] * node.level)
+                            ).resolve()
+                        )
+                    if (
+                        package_name is not None and node.level > 0
+                    ):  # Handle relative imports
+                        module_rel_path = Path(
+                            os.path.join(file_path, *[".."] * node.level, module_name)
+                        ).resolve()
                         idx = str(module_rel_path).rfind(package_name)
                         if idx != -1:
-                            module_name = str(module_rel_path)[idx:].replace(os.path.sep, '.')
+                            module_name = str(module_rel_path)[idx:].replace(
+                                os.path.sep, "."
+                            )
                     try:
-                        module = importlib.import_module(module_name, package=package_name)
+                        module = importlib.import_module(
+                            module_name, package=package_name
+                        )
                     except ModuleNotFoundError:
-                        module = importlib.import_module(f"{package_name}.{module_name}")
+                        module = importlib.import_module(
+                            f"{package_name}.{module_name}"
+                        )
                     if name == "*":
                         scope.update(module.__dict__)
                     else:
                         scope[asname] = getattr(module, name)
                 except (ImportError, AttributeError) as e:
-                    logger.warning(f"Could not import {module_name}: {e} while extracting imports from {file_path}")
+                    logger.warning(
+                        f"Could not import {module_name}: {e} while extracting imports from {file_path}"
+                    )
 
     return scope
 
 
-def extract_function_or_class_file(file_path: str,
-                                   function_names: List[str], join_lines: bool = True,
-                                   return_line_numbers: bool = False,
-                                   include_signature: bool = True,
-                                   as_list: bool = False,
-                                   is_class: bool = False) \
-        -> Union[Dict[str, Union[str, List[str]]],
-        Tuple[Dict[str, Union[str, List[str]]], Dict[str, Tuple[int, int]]]]:
+def extract_function_or_class_file(
+    file_path: str,
+    function_names: List[str],
+    join_lines: bool = True,
+    return_line_numbers: bool = False,
+    include_signature: bool = True,
+    as_list: bool = False,
+    is_class: bool = False,
+) -> Union[
+    Dict[str, Union[str, List[str]]],
+    Tuple[Dict[str, Union[str, List[str]]], Dict[str, Tuple[int, int]]],
+]:
     """
     Extract the source code of a function from a file.
 
@@ -332,19 +402,29 @@ def extract_function_or_class_file(file_path: str,
     with open(file_path, "r") as f:
         source = f.read()
 
-    return extract_function_or_class_from_source(source, function_names, join_lines=join_lines,
-                                                 return_line_numbers=return_line_numbers,
-                                                 include_signature=include_signature, as_list=as_list, is_class=is_class)
+    return extract_function_or_class_from_source(
+        source,
+        function_names,
+        join_lines=join_lines,
+        return_line_numbers=return_line_numbers,
+        include_signature=include_signature,
+        as_list=as_list,
+        is_class=is_class,
+    )
 
 
-def extract_function_or_class_from_source(source: str,
-                                          function_names: List[str], join_lines: bool = True,
-                                          return_line_numbers: bool = False,
-                                          include_signature: bool = True,
-                                          as_list: bool = False,
-                                          is_class: bool = False) \
-        -> Union[Dict[str, Union[str, List[str]]],
-        Tuple[Dict[str, Union[str, List[str]]], Dict[str, Tuple[int, int]]]]:
+def extract_function_or_class_from_source(
+    source: str,
+    function_names: List[str],
+    join_lines: bool = True,
+    return_line_numbers: bool = False,
+    include_signature: bool = True,
+    as_list: bool = False,
+    is_class: bool = False,
+) -> Union[
+    Dict[str, Union[str, List[str]]],
+    Tuple[Dict[str, Union[str, List[str]]], Dict[str, Tuple[int, int]]],
+]:
     """
     Extract the source code of a function from a file.
 
@@ -372,33 +452,47 @@ def extract_function_or_class_from_source(source: str,
         look_for_type = ast.FunctionDef
 
     for node in tree.body:
-        if isinstance(node, look_for_type) and (node.name in function_names or len(function_names) == 0):
+        if isinstance(node, look_for_type) and (
+            node.name in function_names or len(function_names) == 0
+        ):
             # Get the line numbers of the function
             lines = source.splitlines()
-            func_lines = lines[node.lineno - 1:node.end_lineno]
+            func_lines = lines[node.lineno - 1 : node.end_lineno]
             if not include_signature:
                 func_lines = func_lines[1:]
             if as_list:
                 line_numbers_list.append((node.lineno, node.end_lineno))
             else:
                 line_numbers[node.name] = (node.lineno, node.end_lineno)
-            parsed_function = dedent("\n".join(func_lines)) if join_lines else func_lines
+            parsed_function = (
+                dedent("\n".join(func_lines)) if join_lines else func_lines
+            )
             if as_list:
                 functions_source_list.append(parsed_function)
             else:
                 functions_source[node.name] = parsed_function
             if len(function_names) > 0:
-                if len(functions_source) >= len(function_names) or len(functions_source_list) >= len(function_names):
+                if len(functions_source) >= len(function_names) or len(
+                    functions_source_list
+                ) >= len(function_names):
                     break
-    if len(functions_source) < len(function_names) and len(functions_source_list) < len(function_names):
-        logger.warning(f"Could not find all functions in {file_path}: {function_names} not found, "
-                f"functions not found: {set(function_names) - set(functions_source.keys())}")
+    if len(functions_source) < len(function_names) and len(functions_source_list) < len(
+        function_names
+    ):
+        logger.warning(
+            f"Could not find all functions: {function_names} not found, "
+            f"functions not found: {set(function_names) - set(functions_source.keys())}"
+        )
     if return_line_numbers:
-        return functions_source if not as_list else functions_source_list, line_numbers if not as_list else line_numbers_list
+        return functions_source if not as_list else functions_source_list, (
+            line_numbers if not as_list else line_numbers_list
+        )
     return functions_source if not as_list else functions_source_list
 
 
-def encapsulate_user_input(user_input: str, func_signature: str, func_doc: Optional[str] = None) -> str:
+def encapsulate_user_input(
+    user_input: str, func_signature: str, func_doc: Optional[str] = None
+) -> str:
     """
     Encapsulate the user input string with a function definition.
 
@@ -407,20 +501,22 @@ def encapsulate_user_input(user_input: str, func_signature: str, func_doc: Optio
     :param func_doc: The function docstring to use for encapsulation.
     :return: The encapsulated user input string.
     """
-    func_name = func_signature.split('(')[0].strip()
+    func_name = func_signature.split("(")[0].strip()
     if func_name not in user_input:
         new_user_input = func_signature + "\n    "
         if func_doc is not None:
-            new_user_input += f"\"\"\"{func_doc}\"\"\"" + "\n    "
+            new_user_input += f'"""{func_doc}"""' + "\n    "
         if not any(v in user_input for v in ["return ", "yield"]):
-            if '\n' not in user_input:
+            if "\n" not in user_input:
                 new_user_input += f"return {user_input}"
             else:
-                raise ValueError("User input must contain a return statement or be a single line.")
+                raise ValueError(
+                    "User input must contain a return statement or be a single line."
+                )
         else:
-            for cl in user_input.split('\n'):
-                sub_code_lines = cl.split('\n')
-                new_user_input += '\n    '.join(sub_code_lines) + '\n    '
+            for cl in user_input.split("\n"):
+                sub_code_lines = cl.split("\n")
+                new_user_input += "\n    ".join(sub_code_lines) + "\n    "
     else:
         new_user_input = user_input
     return new_user_input
@@ -441,11 +537,17 @@ def build_user_input_from_conclusion(conclusion: Any) -> str:
         function_body = ast.unparse(ast_code.body[0].body)
         user_input = function_body
     elif isinstance(conclusion, set):
-        user_input = '{' + f"{', '.join([conclusion_to_str(t) for t in conclusion])}" + '}'
+        user_input = (
+            "{" + f"{', '.join([conclusion_to_str(t) for t in conclusion])}" + "}"
+        )
     elif isinstance(conclusion, list):
-        user_input = '[' + f"{', '.join([conclusion_to_str(t) for t in conclusion])}" + ']'
+        user_input = (
+            "[" + f"{', '.join([conclusion_to_str(t) for t in conclusion])}" + "]"
+        )
     elif isinstance(conclusion, tuple):
-        user_input = '(' + f"{', '.join([conclusion_to_str(t) for t in conclusion])}" + ')'
+        user_input = (
+            "(" + f"{', '.join([conclusion_to_str(t) for t in conclusion])}" + ")"
+        )
     else:
         user_input = conclusion_to_str(conclusion)
 
@@ -454,7 +556,7 @@ def build_user_input_from_conclusion(conclusion: Any) -> str:
 
 def conclusion_to_str(conclusion_: Any) -> str:
     if isinstance(conclusion_, Enum):
-        return type(conclusion_).__name__ + '.' + conclusion_.name
+        return type(conclusion_).__name__ + "." + conclusion_.name
     elif isinstance(conclusion_, type):
         return conclusion_.__name__
     else:
@@ -474,13 +576,19 @@ def update_case_in_case_query(case_query: CaseQuery, conclusions: Dict[str, Any]
         return
     if not isinstance(conclusions, dict):
         conclusions = {case_query.attribute_name: conclusions}
-    if isinstance(case_query.original_case, SQLTable) or is_dataclass(case_query.original_case):
+    if isinstance(case_query.original_case, SQLTable) or is_dataclass(
+        case_query.original_case
+    ):
         for conclusion_name, conclusion in conclusions.items():
             attribute = getattr(case_query.case, conclusion_name)
             if conclusion_name == case_query.attribute_name:
                 attribute_type = case_query.attribute_type
             else:
-                attribute_type = (get_case_attribute_type(case_query.original_case, conclusion_name, attribute),)
+                attribute_type = (
+                    get_case_attribute_type(
+                        case_query.original_case, conclusion_name, attribute
+                    ),
+                )
             if isinstance(attribute, set):
                 for c in conclusion:
                     attribute.update(make_set(c))
@@ -495,15 +603,22 @@ def update_case_in_case_query(case_query: CaseQuery, conclusions: Dict[str, Any]
                 attribute = set() if attribute is None else attribute
                 for c in conclusion:
                     attribute.update(make_set(c))
-            elif is_iterable(conclusion) and len(conclusion) == 1 \
-                    and any(at is type(list(conclusion)[0]) for at in attribute_type):
+            elif (
+                is_iterable(conclusion)
+                and len(conclusion) == 1
+                and any(at is type(list(conclusion)[0]) for at in attribute_type)
+            ):
                 setattr(case_query.case, conclusion_name, list(conclusion)[0])
-            elif not is_iterable(conclusion) and any(at is type(conclusion) for at in attribute_type):
+            elif not is_iterable(conclusion) and any(
+                at is type(conclusion) for at in attribute_type
+            ):
                 setattr(case_query.case, conclusion_name, conclusion)
             else:
-                raise ValueError(f"Unknown type or type mismatch for attribute {conclusion_name} with type "
-                                 f"{case_query.attribute_type} with conclusion "
-                                 f"{conclusion} of type {type(conclusion)}")
+                raise ValueError(
+                    f"Unknown type or type mismatch for attribute {conclusion_name} with type "
+                    f"{case_query.attribute_type} with conclusion "
+                    f"{conclusion} of type {type(conclusion)}"
+                )
     else:
         case_query.case.update(conclusions)
 
@@ -514,7 +629,9 @@ def is_value_conflicting(conclusion: Any, target: Any) -> bool:
     :param target: The target to compare the conclusion with.
     :return: Whether the conclusion is conflicting with the target by have different values for same type categories.
     """
-    return have_common_types(conclusion, target) and not make_set(conclusion).issubset(make_set(target))
+    return have_common_types(conclusion, target) and not make_set(conclusion).issubset(
+        make_set(target)
+    )
 
 
 def have_common_types(conclusion: Any, target: Any) -> bool:
@@ -529,8 +646,9 @@ def have_common_types(conclusion: Any, target: Any) -> bool:
     return len(common_types) > 0
 
 
-def calculate_precision_and_recall(pred_cat: Dict[str, Any], target: Dict[str, Any]) -> Tuple[
-    List[bool], List[bool]]:
+def calculate_precision_and_recall(
+    pred_cat: Dict[str, Any], target: Dict[str, Any]
+) -> Tuple[List[bool], List[bool]]:
     """
     :param pred_cat: The predicted category.
     :param target: The target category.
@@ -541,30 +659,38 @@ def calculate_precision_and_recall(pred_cat: Dict[str, Any], target: Dict[str, A
     for pred_key, pred_value in pred_cat.items():
         if pred_key not in target:
             continue
-        precision.extend([v in make_set(target[pred_key]) for v in make_set(pred_value)])
+        precision.extend(
+            [v in make_set(target[pred_key]) for v in make_set(pred_value)]
+        )
     for target_key, target_value in target.items():
         if target_key not in pred_cat:
             recall.append(False)
             continue
-        recall.extend([v in make_set(pred_cat[target_key]) for v in make_set(target_value)])
+        recall.extend(
+            [v in make_set(pred_cat[target_key]) for v in make_set(target_value)]
+        )
     return precision, recall
 
 
 def ask_llm(prompt):
     try:
-        response = requests.post("http://localhost:11434/api/generate", json={
-            "model": "codellama:7b-instruct",  # or "phi"
-            "prompt": prompt,
-            "stream": False,
-        })
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": "codellama:7b-instruct",  # or "phi"
+                "prompt": prompt,
+                "stream": False,
+            },
+        )
         result = response.json()
         return result.get("response", "").strip()
     except Exception as e:
         return f"❌ Local LLM error: {e}"
 
 
-def get_case_attribute_type(original_case: Any, attribute_name: str,
-                            known_value: Optional[Any] = None) -> Type:
+def get_case_attribute_type(
+    original_case: Any, attribute_name: str, known_value: Optional[Any] = None
+) -> Type:
     """
     :param original_case: The case to get the attribute from.
     :param attribute_name: The name of the attribute.
@@ -586,7 +712,9 @@ def get_case_attribute_type(original_case: Any, attribute_name: str,
             elif len(args) == 1:
                 return typing_to_python_type(args[0])
             else:
-                raise ValueError(f"Union with more than 2 types is not supported: {args}")
+                raise ValueError(
+                    f"Union with more than 2 types is not supported: {args}"
+                )
         elif origin is not None:
             return origin
         if hint is not None:
@@ -595,13 +723,16 @@ def get_case_attribute_type(original_case: Any, attribute_name: str,
 
 def conclusion_to_json(conclusion):
     if is_iterable(conclusion):
-        conclusions = {'_type': get_full_class_name(type(conclusion)), 'value': []}
+        conclusions = {"_type": get_full_class_name(type(conclusion)), "value": []}
         for c in conclusion:
-            conclusions['value'].append(conclusion_to_json(c))
-    elif hasattr(conclusion, 'to_json'):
+            conclusions["value"].append(conclusion_to_json(c))
+    elif hasattr(conclusion, "to_json"):
         conclusions = conclusion.to_json()
     else:
-        conclusions = {'_type': get_full_class_name(type(conclusion)), 'value': conclusion}
+        conclusions = {
+            "_type": get_full_class_name(type(conclusion)),
+            "value": conclusion,
+        }
     return conclusions
 
 
@@ -625,7 +756,7 @@ def get_names_used(node):
 
 
 def extract_dependencies(code_lines):
-    full_code = '\n'.join(code_lines)
+    full_code = "\n".join(code_lines)
     tree = ast.parse(full_code)
     final_stmt = tree.body[-1]
 
@@ -656,7 +787,7 @@ def extract_dependencies(code_lines):
                 keep = True
         elif isinstance(stmt, (ast.For, ast.While, ast.If)):
             # Check if any of the body statements interact with needed variables
-            for substmt in stmt.body + getattr(stmt, 'orelse', []):
+            for substmt in stmt.body + getattr(stmt, "orelse", []):
                 if handle_stmt(substmt, needed):
                     keep = True
             # Also check the condition (test or iter)
@@ -696,19 +827,19 @@ def serialize_dataclass(obj: Any, seen=None) -> Any:
 
     obj_id = id(obj)
     if obj_id in seen:
-        return {'$ref': seen[obj_id]}
+        return {"$ref": seen[obj_id]}
 
     if is_dataclass(obj):
         uid = str(uuid.uuid4())
         seen[obj_id] = uid
         result = {
-            '$id': uid,
+            "$id": uid,
             "__dataclass__": f"{obj.__class__.__module__}.{obj.__class__.__qualname__}",
-            'fields': {}
+            "fields": {},
         }
         for f in fields(obj):
             value = getattr(obj, f.name)
-            result['fields'][f.name] = serialize_dataclass(value, seen)
+            result["fields"][f.name] = serialize_dataclass(value, seen)
         return result
     else:
         return SubclassJSONSerializer.to_json_static(obj, seen)
@@ -734,22 +865,22 @@ def preload_serialized_objects(data: Any, refs: Dict[str, Any] = None) -> Any:
 
     if isinstance(data, dict):
 
-        if '$ref' in data:
-            ref_id = data['$ref']
+        if "$ref" in data:
+            ref_id = data["$ref"]
             if ref_id not in refs:
-                return {'$ref': data['$ref']}
+                return {"$ref": data["$ref"]}
             return refs[ref_id]
 
-        elif '$id' in data and '__dataclass__' in data and 'fields' in data:
-            cls_path = data['__dataclass__']
-            module_name, class_name = cls_path.rsplit('.', 1)
+        elif "$id" in data and "__dataclass__" in data and "fields" in data:
+            cls_path = data["__dataclass__"]
+            module_name, class_name = cls_path.rsplit(".", 1)
             cls = getattr(importlib.import_module(module_name), class_name)
 
             dummy_instance = cls.__new__(cls)  # Don't call __init__ yet
-            refs[data['$id']] = dummy_instance
+            refs[data["$id"]] = dummy_instance
 
             for f in fields(cls):
-                raw_value = data['fields'].get(f.name)
+                raw_value = data["fields"].get(f.name)
                 value = preload_serialized_objects(raw_value, refs)
                 setattr(dummy_instance, f.name, value)
 
@@ -775,8 +906,8 @@ def resolve_refs(obj, refs, seen=None):
         return seen[obj_id]
 
     # Resolve if dict with $ref
-    if isinstance(obj, dict) and '$ref' in obj:
-        ref_id = obj['$ref']
+    if isinstance(obj, dict) and "$ref" in obj:
+        ref_id = obj["$ref"]
         if ref_id not in refs:
             raise KeyError(f"$ref to unknown ID: {ref_id}")
         return refs[ref_id]
@@ -849,15 +980,20 @@ def capture_variable_assignment(code: str, variable_name: str) -> Optional[str]:
     return assignment
 
 
-def get_func_rdr_model_path(func: Callable, model_dir: str, include_file_name: bool = False) -> str:
+def get_func_rdr_model_path(
+    func: Callable, model_dir: str, include_file_name: bool = False
+) -> str:
     """
     :param func: The function to get the model path for.
     :param model_dir: The directory to save the model to.
     :param include_file_name: Whether to include the file name in the model name.
     :return: The path to the model file.
     """
-    return os.path.join(model_dir, get_func_rdr_model_name(func, include_file_name=include_file_name),
-                        f"{get_func_rdr_model_name(func)}_rdr.py")
+    return os.path.join(
+        model_dir,
+        get_func_rdr_model_name(func, include_file_name=include_file_name),
+        f"{get_func_rdr_model_name(func)}_rdr.py",
+    )
 
 
 def get_func_rdr_model_name(func: Callable, include_file_name: bool = False) -> str:
@@ -869,10 +1005,10 @@ def get_func_rdr_model_name(func: Callable, include_file_name: bool = False) -> 
     func_name = get_method_name(func)
     func_class_name = get_method_class_name_if_exists(func)
     if include_file_name:
-        func_file_name = get_method_file_name(func).split(os.sep)[-1].split('.')[0]
-        model_name = func_file_name + '_'
+        func_file_name = get_method_file_name(func).split(os.sep)[-1].split(".")[0]
+        model_name = func_file_name + "_"
     else:
-        model_name = ''
+        model_name = ""
     model_name += f"{func_class_name}_" if func_class_name else ""
     model_name += f"{func_name}"
     return str_to_snake_case(model_name)
@@ -892,13 +1028,13 @@ def stringify_hint(tp):
     args = get_args(tp)
 
     if origin is not None:
-        origin_str = getattr(origin, '__name__', str(origin)).capitalize()
+        origin_str = getattr(origin, "__name__", str(origin)).capitalize()
         args_str = ", ".join(stringify_hint(arg) for arg in args)
         return f"{origin_str}[{args_str}]"
 
     # Handle built-in types like int, str, etc.
     if isinstance(tp, type):
-        if tp.__module__ == 'builtins':
+        if tp.__module__ == "builtins":
             return tp.__name__
         return f"{tp.__qualname__}"
 
@@ -934,6 +1070,7 @@ def get_file_that_ends_with(directory_path: str, suffix: str) -> Optional[str]:
         return files[0]
     return None
 
+
 def get_function_return_type(func: Callable) -> Union[Type, None, Tuple[Type, ...]]:
     """
     Get the return type of a function.
@@ -952,13 +1089,14 @@ def get_type_from_type_hint(type_hint: Type) -> Union[Type, Tuple[Type, ...]]:
     origin = get_origin(type_hint)
     args = get_args(type_hint)
     if origin not in [list, set, None, Union, Iterator]:
-        raise TypeError(f"{origin} is not a handled return type for type hint {type_hint}")
+        raise TypeError(
+            f"{origin} is not a handled return type for type hint {type_hint}"
+        )
     if origin is None:
         return typing_to_python_type(type_hint)
     if args is None or len(args) == 0:
         return typing_to_python_type(type_hint)
     return args
-
 
 
 def extract_types(tp, seen: Set = None) -> Set[type]:
@@ -1050,12 +1188,14 @@ def get_import_path_from_path(path: str) -> Optional[str]:
         if i == 0:
             current_path = package_name
         else:
-            current_path = '/' + '/'.join(packages[:-i])
-        if os.path.exists(os.path.join(current_path, '__init__.py')):
+            current_path = "/" + "/".join(packages[:-i])
+        if os.path.exists(os.path.join(current_path, "__init__.py")):
             parent_package_idx -= 1
         else:
             break
-    package_name = '.'.join(packages[parent_package_idx:]) if parent_package_idx < 0 else None
+    package_name = (
+        ".".join(packages[parent_package_idx:]) if parent_package_idx < 0 else None
+    )
     return package_name
 
 
@@ -1076,9 +1216,13 @@ def get_function_import_data(func: Callable) -> Tuple[str, str]:
     func_name = get_method_name(func)
     func_class_name = get_method_class_name_if_exists(func)
     func_file_path = get_method_file_name(func)
-    func_file_name = func_file_path.split('/')[-1].split('.')[0]  # Get the file name without extension
+    func_file_name = func_file_path.split("/")[-1].split(".")[
+        0
+    ]  # Get the file name without extension
     func_import_path = get_import_path_from_path(dirname(func_file_path))
-    func_import_path = f"{func_import_path}.{func_file_name}" if func_import_path else func_file_name
+    func_import_path = (
+        f"{func_import_path}.{func_file_name}" if func_import_path else func_file_name
+    )
     if func_class_name and func_class_name != func_name:
         func_import_name = func_class_name
     else:
@@ -1100,8 +1244,12 @@ def get_function_representation(func: Callable) -> str:
     return func_name
 
 
-def get_relative_import(target_file_path, imported_module_path: Optional[str] = None,
-                        module: Optional[str] = None, package_name: Optional[str] = None) -> str:
+def get_relative_import(
+    target_file_path,
+    imported_module_path: Optional[str] = None,
+    module: Optional[str] = None,
+    package_name: Optional[str] = None,
+) -> str:
     """
     Get a relative import path from the target file to the imported module.
 
@@ -1121,20 +1269,26 @@ def get_relative_import(target_file_path, imported_module_path: Optional[str] = 
     target_file_name = Path(target_file_path).name
     if package_name is not None:
         target_path = Path(
-            get_path_starting_from_latest_encounter_of(str(target_path), package_name, [target_file_name]))
+            get_path_starting_from_latest_encounter_of(
+                str(target_path), package_name, [target_file_name]
+            )
+        )
     imported_path = Path(imported_module_path).resolve()
     if package_name is not None:
         imported_path = Path(
-            get_path_starting_from_latest_encounter_of(str(imported_path), package_name, [imported_file_name]))
+            get_path_starting_from_latest_encounter_of(
+                str(imported_path), package_name, [imported_file_name]
+            )
+        )
 
     # Compute relative path from target to imported module
     rel_path = os.path.relpath(imported_path.parent, target_path.parent)
 
     # Convert path to Python import format
-    rel_parts = [part.replace('..', '.') for part in Path(rel_path).parts]
-    rel_parts = rel_parts if rel_parts else ['']
-    dot_parts = [part for part in rel_parts if part == '.']
-    non_dot_parts = [part for part in rel_parts if part != '.'] + [imported_path.stem]
+    rel_parts = [part.replace("..", ".") for part in Path(rel_path).parts]
+    rel_parts = rel_parts if rel_parts else [""]
+    dot_parts = [part for part in rel_parts if part == "."]
+    non_dot_parts = [part for part in rel_parts if part != "."] + [imported_path.stem]
 
     # Join the parts
     joined_parts = "." + "".join(dot_parts) + ".".join(non_dot_parts)
@@ -1142,7 +1296,9 @@ def get_relative_import(target_file_path, imported_module_path: Optional[str] = 
     return joined_parts
 
 
-def get_path_starting_from_latest_encounter_of(path: str, package_name: str, should_contain: List[str]) -> str:
+def get_path_starting_from_latest_encounter_of(
+    path: str, package_name: str, should_contain: List[str]
+) -> str:
     """
     Get the path starting from the package name.
 
@@ -1170,11 +1326,13 @@ def get_path_starting_from_latest_encounter_of(path: str, package_name: str, sho
         raise ValueError(f"Could not find {should_contain} in {path}")
 
 
-def get_imports_from_types(type_objs: Iterable[Type],
-                           target_file_path: Optional[str] = None,
-                           package_name: Optional[str] = None,
-                           exclueded_names: Optional[List[str]] = None,
-                           excluded_modules: Optional[List[str]] = None) -> List[str]:
+def get_imports_from_types(
+    type_objs: Iterable[Type],
+    target_file_path: Optional[str] = None,
+    package_name: Optional[str] = None,
+    exclueded_names: Optional[List[str]] = None,
+    excluded_modules: Optional[List[str]] = None,
+) -> List[str]:
     """
     Format import lines from type objects.
 
@@ -1202,9 +1360,15 @@ def get_imports_from_types(type_objs: Iterable[Type],
                 continue
             if name == "NoneType":
                 module = "types"
-            if module is None or module == 'builtins' or module.startswith('_') \
-                    or module in sys.builtin_module_names or module in excluded_modules or "<" in module \
-                    or name in exclueded_names:
+            if (
+                module is None
+                or module == "builtins"
+                or module.startswith("_")
+                or module in sys.builtin_module_names
+                or module in excluded_modules
+                or "<" in module
+                or name in exclueded_names
+            ):
                 continue
             if module == "typing":
                 module = "typing_extensions"
@@ -1217,17 +1381,23 @@ def get_imports_from_types(type_objs: Iterable[Type],
     for module, names in module_to_types.items():
         filtered_names = set()
         for name in set(names):
-            if '.' in name:
-                stem = '.'.join(name.split('.')[1:])
-                name_to_import = name.split('.')[0]
+            if "." in name:
+                stem = ".".join(name.split(".")[1:])
+                name_to_import = name.split(".")[0]
                 filtered_names.add(name_to_import)
                 stem_imports.append(f"{stem} = {name_to_import}.{stem}")
             else:
                 filtered_names.add(name)
         joined = ", ".join(sorted(set(filtered_names)))
         import_path = module
-        if (target_file_path is not None) and (package_name is not None) and (package_name in module):
-            import_path = get_relative_import(target_file_path, module=module, package_name=package_name)
+        if (
+            (target_file_path is not None)
+            and (package_name is not None)
+            and (package_name in module)
+        ):
+            import_path = get_relative_import(
+                target_file_path, module=module, package_name=package_name
+            )
         lines.append(f"from {import_path} import {joined}")
     lines.extend(stem_imports)
     return lines
@@ -1243,8 +1413,14 @@ def get_method_args_as_dict(method: Callable, *args, **kwargs) -> Dict[str, Any]
     :return: A dictionary of the arguments.
     """
     func_arg_names = method.__code__.co_varnames
-    func_arg_names = list(map(lambda arg_name: f"{arg_name}_" if arg_name in ["self", "cls"] else arg_name,
-                              func_arg_names))
+    func_arg_names = list(
+        map(
+            lambda arg_name: (
+                f"{arg_name}_" if arg_name in ["self", "cls"] else arg_name
+            ),
+            func_arg_names,
+        )
+    )
     func_arg_values = args + tuple(kwargs.values())
     return dict(zip(func_arg_names, func_arg_values))
 
@@ -1271,8 +1447,11 @@ def get_method_class_name_if_exists(method: Callable) -> Optional[str]:
             return method.__self__.__name__
         elif hasattr(method.__self__, "__class__"):
             return method.__self__.__class__.__name__
-    return (method.__qualname__.split('.')[0]
-            if hasattr(method, "__qualname__") and '.' in method.__qualname__ else None)
+    return (
+        method.__qualname__.split(".")[0]
+        if hasattr(method, "__qualname__") and "." in method.__qualname__
+        else None
+    )
 
 
 def get_method_class_if_exists(method: Callable, *args) -> Optional[Type]:
@@ -1286,9 +1465,9 @@ def get_method_class_if_exists(method: Callable, *args) -> Optional[Type]:
         if hasattr(method.__self__, "__class__"):
             return method.__self__.__class__
     elif method.__code__.co_varnames:
-        if method.__code__.co_varnames[0] == 'self':
+        if method.__code__.co_varnames[0] == "self":
             return args[0].__class__
-        elif method.__code__.co_varnames[0] == 'cls':
+        elif method.__code__.co_varnames[0] == "cls":
             return args[0]
     return None
 
@@ -1328,7 +1507,9 @@ def is_iterable(obj: Any) -> bool:
 
     :param obj: The object to check.
     """
-    return hasattr(obj, "__iter__") and not isinstance(obj, (str, type, bytes, bytearray))
+    return hasattr(obj, "__iter__") and not isinstance(
+        obj, (str, type, bytes, bytearray)
+    )
 
 
 def get_type_from_string(type_path: str):
@@ -1345,13 +1526,13 @@ def get_type_from_string(type_path: str):
         idx = -1
         while True:
             try:
-                module = importlib.import_module('.'.join(module_path_parts[:idx]))
+                module = importlib.import_module(".".join(module_path_parts[:idx]))
                 break
             except ModuleNotFoundError:
                 idx -= 1
                 if abs(idx) > len(module_path_parts):
                     raise
-    if module == builtins and class_name == 'NoneType':
+    if module == builtins and class_name == "NoneType":
         return type(None)
     return getattr(module, class_name)
 
@@ -1374,7 +1555,9 @@ def recursive_subclasses(cls):
     :param cls: The class.
     :return: A list of the classes subclasses.
     """
-    return cls.__subclasses__() + [g for s in cls.__subclasses__() for g in recursive_subclasses(s)]
+    return cls.__subclasses__() + [
+        g for s in cls.__subclasses__() for g in recursive_subclasses(s)
+    ]
 
 
 class SubclassJSONSerializer:
@@ -1384,6 +1567,7 @@ class SubclassJSONSerializer:
     Classes that inherit from this class can be serialized and deserialized automatically by calling this classes
     'from_json' method.
     """
+
     data_class_refs = {}
 
     def to_json_file(self, filename: str):
@@ -1472,10 +1656,10 @@ class SubclassJSONSerializer:
             # if the data is a list, deserialize it
             return [cls.from_json(d) for d in data]
         elif isinstance(data, dict):
-            if '__dataclass__' in data:
+            if "__dataclass__" in data:
                 # if the data is a dataclass, deserialize it
                 return deserialize_dataclass(data, cls.data_class_refs)
-            elif '_type' not in data:
+            elif "_type" not in data:
                 return {k: cls.from_json(v) for k, v in data.items()}
         elif not isinstance(data, dict):
             return data
@@ -1486,19 +1670,23 @@ class SubclassJSONSerializer:
             return data_type
         if data_type == NoneType:
             return None
-        if data_type.__module__ == 'builtins':
-            if is_iterable(data['value']) and not isinstance(data['value'], dict):
-                return data_type([cls.from_json(d) for d in data['value']])
+        if data_type.__module__ == "builtins":
+            if is_iterable(data["value"]) and not isinstance(data["value"], dict):
+                return data_type([cls.from_json(d) for d in data["value"]])
             return data_type(data["value"])
         if get_full_class_name(cls) == data["_type"]:
             data.pop("_type")
             return cls._from_json(data)
-        for subclass in recursive_subclasses(SubclassJSONSerializer):
-            if get_full_class_name(subclass) == data["_type"]:
-                # subclass_data = deepcopy(data)
-                subclass_data = data
-                subclass_data.pop("_type")
-                return subclass._from_json(subclass_data)
+        try:
+            module = importlib.import_module(data_type.__module__)
+            return getattr(module, data_type.__qualname__)._from_json(data)
+        except (ModuleNotFoundError, AttributeError):
+            for subclass in recursive_subclasses(SubclassJSONSerializer):
+                if get_full_class_name(subclass) == data["_type"]:
+                    # subclass_data = deepcopy(data)
+                    subclass_data = data
+                    subclass_data.pop("_type")
+                    return subclass._from_json(subclass_data)
 
         raise ValueError("Unknown type {}".format(data["_type"]))
 
@@ -1600,7 +1788,7 @@ def get_value_type_from_type_hint(attr_name: str, obj: Any) -> Type:
     :param obj: The object to get the attributes from.
     """
     # check first if obj is a function object
-    if hasattr(obj, '__code__'):
+    if hasattr(obj, "__code__"):
         func_type_hints = get_type_hints(obj)
         if attr_name in func_type_hints:
             hint = func_type_hints[attr_name]
@@ -1615,7 +1803,9 @@ def get_value_type_from_type_hint(attr_name: str, obj: Any) -> Type:
             attr_value = getattr(obj, attr_name)
             if attr_value is not None:
                 return type(attr_value)
-        raise ValueError(f"Couldn't get type for Attribute {attr_name}, please provide a type hint")
+        raise ValueError(
+            f"Couldn't get type for Attribute {attr_name}, please provide a type hint"
+        )
     if origin in [list, set, tuple, type, dict]:
         attr_value_type = args[0]
     elif hint:
@@ -1625,7 +1815,9 @@ def get_value_type_from_type_hint(attr_name: str, obj: Any) -> Type:
     return attr_value_type
 
 
-def get_hint_for_attribute(attr_name: str, obj: Any) -> Tuple[Optional[Type], Optional[Type], Tuple[Type]]:
+def get_hint_for_attribute(
+    attr_name: str, obj: Any
+) -> Tuple[Optional[Type], Optional[Type], Tuple[Type]]:
     """
     Get the type hint for an attribute of an object.
 
@@ -1639,7 +1831,7 @@ def get_hint_for_attribute(attr_name: str, obj: Any) -> Tuple[Optional[Type], Op
     if isinstance(class_attr, property):
         if not class_attr.fget:
             raise ValueError(f"Attribute {attr_name} has no getter.")
-        hint = get_type_hints(class_attr.fget)['return']
+        hint = get_type_hints(class_attr.fget)["return"]
     else:
         try:
             hint = get_type_hints(obj.__class__)[attr_name]
@@ -1649,7 +1841,9 @@ def get_hint_for_attribute(attr_name: str, obj: Any) -> Tuple[Optional[Type], Op
     return origin, origin, args
 
 
-def get_origin_and_args_from_type_hint(type_hint: Type) -> Tuple[Optional[Type], Tuple[Type]]:
+def get_origin_and_args_from_type_hint(
+    type_hint: Type,
+) -> Tuple[Optional[Type], Tuple[Type]]:
     """
     Get the origin and arguments from a type hint.W
 
@@ -1674,24 +1868,40 @@ def table_rows_as_str(row_dicts: List[Dict[str, Any]], columns_per_row: int = 20
     max_line_sze = 100
     all_row_dicts_items = [list(row_dict.items()) for row_dict in row_dicts]
     # make items a list of n rows such that each row has a max size of 4
-    all_items = [all_items[i:i + columns_per_row] for all_items in all_row_dicts_items
-                 for i in range(0, len(all_items), columns_per_row)]
+    all_items = [
+        all_items[i : i + columns_per_row]
+        for all_items in all_row_dicts_items
+        for i in range(0, len(all_items), columns_per_row)
+    ]
     keys = [list(map(lambda i: i[0], row)) for row in all_items]
     values = [list(map(lambda i: i[1], row)) for row in all_items]
     zipped_keys = list(zip(*keys))
     zipped_values = list(zip(*values))
-    keys_values = [list(zip(zipped_keys[i], zipped_values[i])) for i in range(len(zipped_keys))]
+    keys_values = [
+        list(zip(zipped_keys[i], zipped_values[i])) for i in range(len(zipped_keys))
+    ]
     keys_values = [list(r[0]) + list(r[1]) if len(r) > 1 else r[0] for r in keys_values]
     all_table_rows = []
-    row_values = [list(map(lambda v: str(v) if v is not None else "", row)) for row in keys_values]
-    row_values = [list(map(lambda v: v[:max_line_sze] + '...' if len(v) > max_line_sze else v, row)) for row in
-                  row_values]
-    row_values = [list(map(lambda v: v.lower() if v in ["True", "False"] else v, row)) for row in row_values]
+    row_values = [
+        list(map(lambda v: str(v) if v is not None else "", row)) for row in keys_values
+    ]
+    row_values = [
+        list(
+            map(lambda v: v[:max_line_sze] + "..." if len(v) > max_line_sze else v, row)
+        )
+        for row in row_values
+    ]
+    row_values = [
+        list(map(lambda v: v.lower() if v in ["True", "False"] else v, row))
+        for row in row_values
+    ]
     # Step 1: Get terminal size
     terminal_width = shutil.get_terminal_size((80, 20)).columns
     # Step 2: Dynamically calculate max width per column (simple approximation)
     max_col_width = terminal_width // len(row_values[0])
-    table = tabulate(row_values, tablefmt='simple_grid', maxcolwidths=max_col_width)  # [max_line_sze] * 2)
+    table = tabulate(
+        row_values, tablefmt="simple_grid", maxcolwidths=max_col_width
+    )  # [max_line_sze] * 2)
     all_table_rows.append(table)
     return "\n".join(all_table_rows)
 
@@ -1712,13 +1922,21 @@ def dataclass_to_dict(obj):
     :return: The dictionary representation of the dataclass.
     """
     if is_dataclass(obj):
-        return {f.name: getattr(obj, f.name) for f in fields(obj) if not f.name.startswith("_")}
+        return {
+            f.name: getattr(obj, f.name)
+            for f in fields(obj)
+            if not f.name.startswith("_")
+        }
     else:
         raise ValueError(f"Object {obj} is not a dataclass.")
 
 
-def get_attribute_name(obj: Any, attribute: Optional[Any] = None, attribute_type: Optional[Type] = None,
-                       possible_value: Optional[Any] = None) -> Optional[str]:
+def get_attribute_name(
+    obj: Any,
+    attribute: Optional[Any] = None,
+    attribute_type: Optional[Type] = None,
+    possible_value: Optional[Any] = None,
+) -> Optional[str]:
     """
     Get the name of an attribute from an object. The attribute can be given as a value, a type or a target value.
     And this method will try to find the attribute name using the given information.
@@ -1739,7 +1957,9 @@ def get_attribute_name(obj: Any, attribute: Optional[Any] = None, attribute_type
     return attribute_name
 
 
-def get_attribute_by_type(obj: Any, prop_type: Type) -> Tuple[Optional[str], Optional[Any]]:
+def get_attribute_by_type(
+    obj: Any, prop_type: Type
+) -> Tuple[Optional[str], Optional[Any]]:
     """
     Get a property from an object by type.
 
@@ -1755,7 +1975,9 @@ def get_attribute_by_type(obj: Any, prop_type: Type) -> Tuple[Optional[str], Opt
         if isinstance(prop_value, prop_type):
             return name, prop_value
         if hasattr(prop_value, "__iter__") and not isinstance(prop_value, str):
-            if len(prop_value) > 0 and any(isinstance(v, prop_type) for v in prop_value):
+            if len(prop_value) > 0 and any(
+                isinstance(v, prop_type) for v in prop_value
+            ):
                 return name, prop_value
             else:
                 # get args of type hint
@@ -1799,11 +2021,17 @@ def get_attribute_values_transitively(obj: Any, attribute: Any) -> Any:
     """
     if hasattr(obj, "__iter__") and not isinstance(obj, str):
         if isinstance(obj, (dict, UserDict)):
-            all_values = [get_attribute_values_transitively(v, attribute) for v in obj.values()
-                          if not isinstance(v, (str, type)) and hasattr(v, attribute)]
+            all_values = [
+                get_attribute_values_transitively(v, attribute)
+                for v in obj.values()
+                if not isinstance(v, (str, type)) and hasattr(v, attribute)
+            ]
         else:
-            all_values = [get_attribute_values_transitively(a, attribute) for a in obj
-                          if not isinstance(a, (str, type)) and hasattr(a, attribute)]
+            all_values = [
+                get_attribute_values_transitively(a, attribute)
+                for a in obj
+                if not isinstance(a, (str, type)) and hasattr(a, attribute)
+            ]
         if can_be_a_set(all_values):
             return set().union(*all_values)
         else:
@@ -1818,7 +2046,9 @@ def can_be_a_set(value: Any) -> bool:
     :param value: The value to check.
     """
     if hasattr(value, "__iter__") and not isinstance(value, str):
-        if len(value) > 0 and any(hasattr(v, "__iter__") and not isinstance(v, str) for v in value):
+        if len(value) > 0 and any(
+            hasattr(v, "__iter__") and not isinstance(v, str) for v in value
+        ):
             return False
         else:
             return True
@@ -1886,7 +2116,9 @@ def tree_to_graph(root_node: Node) -> nx.DiGraph:
         for child in node.children:
             if unique_node_names(child) not in graph.nodes:
                 graph.add_node(unique_node_names(child))
-            graph.add_edge(unique_node_names(node), unique_node_names(child), weight=child.weight)
+            graph.add_edge(
+                unique_node_names(node), unique_node_names(child), weight=child.weight
+            )
             add_edges(child)
 
     add_edges(root_node)
@@ -1928,9 +2160,21 @@ _RE_ESC = re.compile(r'["\\]')
 
 class FilteredDotExporter(object):
 
-    def __init__(self, node, include_nodes=None, graph="digraph", name="tree", options=None,
-                 indent=4, nodenamefunc=None, nodeattrfunc=None,
-                 edgeattrfunc=None, edgetypefunc=None, maxlevel=None, use_legend: bool = True):
+    def __init__(
+        self,
+        node,
+        include_nodes=None,
+        graph="digraph",
+        name="tree",
+        options=None,
+        indent=4,
+        nodenamefunc=None,
+        nodeattrfunc=None,
+        edgeattrfunc=None,
+        edgetypefunc=None,
+        maxlevel=None,
+        use_legend: bool = True,
+    ):
         """
         Dot Language Exporter.
 
@@ -2080,7 +2324,9 @@ class FilteredDotExporter(object):
         self.maxlevel = maxlevel
         self.include_nodes = include_nodes
         node_name_func = get_unique_node_names_func(node)
-        self.include_node_names = [node_name_func(n) for n in self.include_nodes] if include_nodes else None
+        self.include_node_names = (
+            [node_name_func(n) for n in self.include_nodes] if include_nodes else None
+        )
         self.use_legend: bool = use_legend
 
     def __iter__(self):
@@ -2090,8 +2336,9 @@ class FilteredDotExporter(object):
         nodeattrfunc = self.nodeattrfunc or self._default_nodeattrfunc
         edgeattrfunc = self.edgeattrfunc or self._default_edgeattrfunc
         edgetypefunc = self.edgetypefunc or self._default_edgetypefunc
-        return self.__iter(indent, nodenamefunc, nodeattrfunc, edgeattrfunc,
-                           edgetypefunc)
+        return self.__iter(
+            indent, nodenamefunc, nodeattrfunc, edgeattrfunc, edgetypefunc
+        )
 
     @staticmethod
     def _default_nodenamefunc(node):
@@ -2147,7 +2394,10 @@ subgraph cluster_legend {
     def __iter_nodes(self, indent, nodenamefunc, nodeattrfunc):
         for node in PreOrderIter(self.node, maxlevel=self.maxlevel):
             nodename = nodenamefunc(node)
-            if self.include_nodes is not None and nodename not in self.include_node_names:
+            if (
+                self.include_nodes is not None
+                and nodename not in self.include_node_names
+            ):
                 continue
             nodeattr = nodeattrfunc(node)
             nodeattr = " [%s]" % nodeattr if nodeattr is not None else ""
@@ -2157,17 +2407,28 @@ subgraph cluster_legend {
         maxlevel = self.maxlevel - 1 if self.maxlevel else None
         for node in PreOrderIter(self.node, maxlevel=maxlevel):
             nodename = nodenamefunc(node)
-            if self.include_nodes is not None and nodename not in self.include_node_names:
+            if (
+                self.include_nodes is not None
+                and nodename not in self.include_node_names
+            ):
                 continue
             for child in node.children:
                 childname = nodenamefunc(child)
-                if self.include_nodes is not None and childname not in self.include_node_names:
+                if (
+                    self.include_nodes is not None
+                    and childname not in self.include_node_names
+                ):
                     continue
                 edgeattr = edgeattrfunc(node, child)
                 edgetype = edgetypefunc(node, child)
                 edgeattr = " [%s]" % edgeattr if edgeattr is not None else ""
-                yield '%s"%s" %s "%s"%s;' % (indent, FilteredDotExporter.esc(nodename), edgetype,
-                                             FilteredDotExporter.esc(childname), edgeattr)
+                yield '%s"%s" %s "%s"%s;' % (
+                    indent,
+                    FilteredDotExporter.esc(nodename),
+                    edgetype,
+                    FilteredDotExporter.esc(childname),
+                    edgeattr,
+                )
 
     def to_dotfile(self, filename):
         """
@@ -2215,7 +2476,7 @@ subgraph cluster_legend {
         try:
             os.remove(dotfilename)
         except Exception:  # pragma: no cover
-            msg = 'Could not remove temporary file %s' % dotfilename
+            msg = "Could not remove temporary file %s" % dotfilename
             logger.warning(msg)
 
     def to_source(self) -> Source:
@@ -2230,10 +2491,16 @@ subgraph cluster_legend {
         return _RE_ESC.sub(lambda m: r"\%s" % m.group(0), six.text_type(value))
 
 
-def render_tree(root: Node, use_dot_exporter: bool = False,
-                filename: str = "scrdr", only_nodes: List[Node] = None, show_in_console: bool = False,
-                color_map: Optional[Callable[[Node], str]] = None,
-                view: bool = False, use_legend: bool = True) -> None:
+def render_tree(
+    root: Node,
+    use_dot_exporter: bool = False,
+    filename: str = "scrdr",
+    only_nodes: List[Node] = None,
+    show_in_console: bool = False,
+    color_map: Optional[Callable[[Node], str]] = None,
+    view: bool = False,
+    use_legend: bool = True,
+) -> None:
     """
     Render the tree using the console and optionally export it to a dot file.
 
@@ -2253,19 +2520,21 @@ def render_tree(root: Node, use_dot_exporter: bool = False,
         for pre, _, node in RenderTree(root):
             if only_nodes is not None and node not in only_nodes:
                 continue
-            print(f"{pre}{node.weight if hasattr(node, 'weight') and node.weight else ''} {node.__str__()}")
+            print(
+                f"{pre}{node.weight if hasattr(node, 'weight') and node.weight else ''} {node.__str__()}"
+            )
     if use_dot_exporter:
         unique_node_names = get_unique_node_names_func(root)
 
-        de = FilteredDotExporter(root,
-                                 include_nodes=only_nodes,
-                                 nodenamefunc=unique_node_names,
-                                 edgeattrfunc=edge_attr_setter,
-                                 nodeattrfunc=lambda node: \
-                                     f'style=filled,'
-                                     f' fillcolor={color_map(node) if color_map else getattr(node, "color", "white")}',
-                                 use_legend=use_legend
-                                 )
+        de = FilteredDotExporter(
+            root,
+            include_nodes=only_nodes,
+            nodenamefunc=unique_node_names,
+            edgeattrfunc=edge_attr_setter,
+            nodeattrfunc=lambda node: f"style=filled,"
+            f' fillcolor={color_map(node) if color_map else getattr(node, "color", "white")}',
+            use_legend=use_legend,
+        )
         if view:
             de.to_source().view()
         else:
@@ -2295,16 +2564,39 @@ def draw_tree(root: Node, fig: Figure):
     # scale down pos
     max_pos_x = max([v[0] for v in pos.values()])
     max_pos_y = max([v[1] for v in pos.values()])
-    pos = {k: (v[0] * fig_sz_x / max_pos_x, v[1] * fig_sz_y / max_pos_y) for k, v in pos.items()}
-    nx.draw(graph, pos, with_labels=True, node_color="lightblue", edge_color="gray", node_size=1000,
-            ax=fig.gca(), node_shape="o", font_size=8)
-    nx.draw_networkx_edge_labels(graph, pos, edge_labels=nx.get_edge_attributes(graph, 'weight'),
-                                 ax=fig.gca(), rotate=False, clip_on=False)
+    pos = {
+        k: (v[0] * fig_sz_x / max_pos_x, v[1] * fig_sz_y / max_pos_y)
+        for k, v in pos.items()
+    }
+    nx.draw(
+        graph,
+        pos,
+        with_labels=True,
+        node_color="lightblue",
+        edge_color="gray",
+        node_size=1000,
+        ax=fig.gca(),
+        node_shape="o",
+        font_size=8,
+    )
+    nx.draw_networkx_edge_labels(
+        graph,
+        pos,
+        edge_labels=nx.get_edge_attributes(graph, "weight"),
+        ax=fig.gca(),
+        rotate=False,
+        clip_on=False,
+    )
     plt.pause(0.1)
 
 
-def encapsulate_code_lines_into_a_function(code_lines: List[str], function_name: str, function_signature: str,
-                                           func_doc: str, case_query: CaseQuery) -> str:
+def encapsulate_code_lines_into_a_function(
+    code_lines: List[str],
+    function_name: str,
+    function_signature: str,
+    func_doc: str,
+    case_query: CaseQuery,
+) -> str:
     """
     Encapsulate the given code lines into a function with the specified name, signature, and docstring.
 
@@ -2314,7 +2606,7 @@ def encapsulate_code_lines_into_a_function(code_lines: List[str], function_name:
     :param func_doc: The function docstring to include in the user input.
     :param case_query: The case query object.
     """
-    code = '\n'.join(code_lines)
+    code = "\n".join(code_lines)
     code = encapsulate_user_input(code, function_signature, func_doc)
     if case_query.is_function:
         args = "**case"
@@ -2335,5 +2627,3 @@ def get_method_object_from_pytest_request(request) -> Callable:
     else:
         func = getattr(func, test_name)
     return func
-
-

@@ -1,3 +1,4 @@
+-r rdr_requirements.txt
 rdflib
 jinja2
 owlrl
