@@ -166,7 +166,7 @@ class TestAlchemyRDR(TestCase):
                 assert make_set(cat_val) == make_set(case_targets[cat_name])
 
         if save_answers:
-            cwd = os.getcwd()
+            cwd = os.path.dirname(__file__)
             file = os.path.join(cwd, filename)
             expert.save_answers(file)
 

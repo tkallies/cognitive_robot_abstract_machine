@@ -88,7 +88,7 @@ def view_rdr(
     world = handles_and_containers_world
     expert = Human(use_loaded_answers=use_loaded_answers, append=append)
     filename = os.path.join(
-        os.getcwd(), "test_expert_answers/view_rdr_expert_answers_fit"
+        os.path.dirname(__file__), "test_expert_answers", "view_rdr_expert_answers_fit"
     )
     if use_loaded_answers:
         expert.load_answers(filename)
@@ -119,7 +119,9 @@ def drawer_rdr(
 ):
     expert = Human(use_loaded_answers=use_loaded_answers)
     filename = os.path.join(
-        os.getcwd(), "test_expert_answers/correct_drawer_rdr_expert_answers_fit"
+        os.path.dirname(__file__),
+        "test_expert_answers",
+        "correct_drawer_rdr_expert_answers_fit",
     )
     if use_loaded_answers:
         expert.load_answers(filename)

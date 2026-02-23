@@ -208,7 +208,7 @@ class RelationalRDRTestCase(TestCase):
         self.assertEqual(cat, self.target)
 
         if save_answers:
-            cwd = os.getcwd()
+            cwd = os.path.dirname(__file__)
             file = os.path.join(cwd, filename)
             expert.save_answers(file)
 

@@ -92,7 +92,7 @@ class TestRDR(TestCase):
         self.assertEqual(cat, self.targets[0])
 
         if save_answers:
-            cwd = os.getcwd()
+            cwd = os.path.dirname(__file__)
             file = os.path.join(cwd, filename)
             expert.save_answers(file)
 
@@ -586,7 +586,7 @@ class TestRDR(TestCase):
         self.assertEqual(cats[0], self.targets[0])
 
         if save_answers:
-            cwd = os.getcwd()
+            cwd = os.path.dirname(__file__)
             file = os.path.join(cwd, filename)
             expert.save_answers(file)
 
@@ -614,7 +614,7 @@ class TestRDR(TestCase):
             cat = mcrdr.classify(case_query.case)
             self.assertEqual(make_set(cat), make_set(case_query.target_value))
         if save_answers:
-            cwd = os.getcwd()
+            cwd = os.path.dirname(__file__)
             file = os.path.join(cwd, filename)
             expert.save_answers(file)
 
@@ -643,7 +643,7 @@ class TestRDR(TestCase):
             cat = mcrdr.classify(case_query.case)
             self.assertEqual(make_set(cat), make_set(case_query.target_value))
         if save_answers:
-            cwd = os.getcwd()
+            cwd = os.path.dirname(__file__)
             file = os.path.join(cwd, filename)
             expert.save_answers(file)
 
@@ -672,7 +672,7 @@ class TestRDR(TestCase):
             cat = mcrdr.classify(case_query.case)
             self.assertEqual(make_set(cat), make_set(case_query.target_value))
         if save_answers:
-            cwd = os.getcwd()
+            cwd = os.path.dirname(__file__)
             file = os.path.join(cwd, filename)
             expert.save_answers(file)
 
@@ -708,7 +708,7 @@ class TestRDR(TestCase):
             self.assertEqual(make_set(value), make_set(targets[cat_name]))
 
         if save_answers:
-            cwd = os.getcwd()
+            cwd = os.path.dirname(__file__)
             file = os.path.join(cwd, filename)
             expert.save_answers(file)
 

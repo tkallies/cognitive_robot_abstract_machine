@@ -241,7 +241,7 @@ def get_two_molecules_model(
             assert r == case_query.target_value
 
     if save_answers:
-        cwd = os.getcwd()
+        cwd = os.path.dirname(__file__)
         file = os.path.join(cwd, filename)
         expert.save_answers(file)
 

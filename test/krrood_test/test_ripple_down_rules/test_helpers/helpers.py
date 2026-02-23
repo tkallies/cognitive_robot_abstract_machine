@@ -30,7 +30,9 @@ def get_fit_scrdr(
     case_factory: Callable = load_zoo_cases,
     scenario: Optional[Callable] = None,
 ) -> Tuple[SingleClassRDR, List[CaseQuery]]:
-    filename = os.path.join(os.getcwd(), expert_answers_dir, expert_answers_file)
+    filename = os.path.join(
+        os.path.dirname(__file__), "..", expert_answers_dir, expert_answers_file
+    )
     expert = Human(use_loaded_answers=load_answers, answers_save_path=filename)
     if load_answers:
         expert.load_answers(filename)
@@ -79,7 +81,9 @@ def get_fit_mcrdr(
     case_factory: Callable = load_zoo_cases,
     scenario: Optional[Callable] = None,
 ) -> MultiClassRDR:
-    filename = os.path.join(os.getcwd(), expert_answers_dir, expert_answers_file)
+    filename = os.path.join(
+        os.path.dirname(__file__), "..", expert_answers_dir, expert_answers_file
+    )
     expert = Human(use_loaded_answers=load_answers, answers_save_path=filename)
     if load_answers:
         expert.load_answers(filename)
