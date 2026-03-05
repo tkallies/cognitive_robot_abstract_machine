@@ -122,7 +122,7 @@ node.destroy_node()
 rt.update_scene()
 rt.scene.show()
 
-#try:
-#    rclpy.shutdown()
-#except Exception:
-#    pass
+try:
+    rclpy.shutdown()
+except Exception:
+    pass
