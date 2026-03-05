@@ -1,19 +1,19 @@
 import rclpy
 
+from acrambly.pipeline import PerceptionClientSingle
 from pycram.datastructures.dataclasses import Context
 from pycram.datastructures.enums import Arms, ApproachDirection, VerticalAlignment
 from pycram.datastructures.grasp import GraspDescription
-from pycram.datastructures.pose import PoseStamped
 from pycram.language import SequentialPlan
 from pycram.motion_executor import simulated_robot
 from pycram.robot_plans import (
     ParkArmsActionDescription,
-    PickUpActionDescription,
-    PlaceActionDescription,
+    StackingActionDescription,
 )
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.robots.tracy import Tracy
 from semantic_digital_twin.spatial_computations.raytracer import RayTracer
 from semantic_digital_twin.spatial_types.spatial_types import HomogeneousTransformationMatrix as tm
 from semantic_digital_twin.world import World
@@ -21,7 +21,8 @@ from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.geometry import Box, Scale, Color
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
-from semantic_digital_twin.robots.tracy import Tracy
+
+perception = False
 
 sw = World()
 body_box1 = Body(
@@ -41,10 +42,9 @@ box1_target = [0.75, 0.50, 0.07, 0, 0, 0]
 box2_target = [0.75, 0.50, 0.12, 0, 0, 0]
 box3_target = [0.75, 0.50, 0.19, 0, 0, 0]
 
-box1 = Box(tm(reference_frame=body_box1),scale=Scale(0.05,0.05,0.05), color=Color(1,0,0,1))
-box2 = Box(tm(reference_frame=body_box2),scale=Scale(0.05,0.05,0.05), color=Color(0,1,0,1))
-box3 = Box(tm(reference_frame=body_box3),scale=Scale(0.05,0.05,0.05), color=Color(0,0,1,1))
-
+box1 = Box(tm(reference_frame=body_box1), scale=Scale(0.05, 0.05, 0.05), color=Color(1, 0, 0, 1))
+box2 = Box(tm(reference_frame=body_box2), scale=Scale(0.05, 0.05, 0.05), color=Color(1, 1, 0, 1))
+box3 = Box(tm(reference_frame=body_box3), scale=Scale(0.05, 0.05, 0.05), color=Color(0, 0, 1, 1))
 
 body_box1.collision = body_box1.visual = ShapeCollection([box1], body_box1)
 body_box2.collision = body_box2.visual = ShapeCollection([box2], body_box2)
@@ -54,8 +54,7 @@ tracy_world = URDFParser.from_file("../semantic_digital_twin/resources/urdf/trac
 robot_view = Tracy.from_world(tracy_world)
 root = tracy_world.root
 
-
-#add boxes to world
+# add boxes to world
 with tracy_world.modify_world():
     c_root_box1 = Connection6DoF.create_with_dofs(world=tracy_world, parent=root, child=body_box1)
     tracy_world.add_connection(c_root_box1)
@@ -73,6 +72,13 @@ if not rclpy.ok():
     rclpy.init()
 node = rclpy.create_node("semantic_world")
 
+if perception:
+    client = PerceptionClientSingle(tracy_world, node)
+
+    client.request(body_box1.name.name)
+    client.request(body_box2.name.name)
+    client.request(body_box3.name.name)
+
 viz = VizMarkerPublisher(world=tracy_world, node=node)
 
 rt = RayTracer(tracy_world)
@@ -84,28 +90,29 @@ with simulated_robot:
     SequentialPlan(
         ctx,
         ParkArmsActionDescription([Arms.BOTH]),
-        PickUpActionDescription(
+        StackingActionDescription(
             object_designator=body_box1,
-            grasp_description=GraspDescription(ApproachDirection.FRONT, VerticalAlignment.TOP, robot_view.left_arm.manipulator),
+            target=body_box2,
             arm=Arms.LEFT,
-        ),
-        PlaceActionDescription(
-            object_designator=body_box1,
-            target_location=PoseStamped.from_list(frame=robot_view.root, position=box1_target[0:3], orientation=[1,0,0,0]),
-            arm=Arms.LEFT,
-        ),
-        ParkArmsActionDescription([Arms.BOTH]),
-        PickUpActionDescription(
+            grasp_description=GraspDescription(ApproachDirection.FRONT, VerticalAlignment.TOP,
+                                               robot_view.left_arm.manipulator))
+    ).perform()
+
+    if perception:
+        client.request(body_box2.name.name)
+        client.request(body_box3.name.name)
+
+    rt.update_scene()
+    rt.scene.show()
+
+    SequentialPlan(
+        ctx,
+        StackingActionDescription(
             object_designator=body_box3,
-            grasp_description=GraspDescription(ApproachDirection.FRONT, VerticalAlignment.TOP, robot_view.left_arm.manipulator),
+            target=body_box1,
             arm=Arms.LEFT,
-        ),
-        PlaceActionDescription(
-            object_designator=body_box3,
-            target_location=PoseStamped.from_list(frame=robot_view.root, position=box2_target[0:3], orientation=[1,0,0,0]),
-            arm=Arms.LEFT,
-        ),
-        ParkArmsActionDescription([Arms.BOTH]),
+            grasp_description=GraspDescription(ApproachDirection.FRONT, VerticalAlignment.TOP,
+                                               robot_view.left_arm.manipulator))
     ).perform()
 
 print("done")
