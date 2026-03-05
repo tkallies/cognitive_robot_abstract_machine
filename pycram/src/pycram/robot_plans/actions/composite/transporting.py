@@ -490,7 +490,7 @@ class StackingAction(ActionDescription):
     """
     target: Body
     """
-    Target Location to which the object should be transported
+    Object designator_description describing the target object on top of which the object is supposed to be stacked.
     """
     arm: Arms
     """

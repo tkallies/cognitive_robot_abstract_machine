@@ -80,6 +80,7 @@ if perception:
     client.request(body_box3.name.name)
 
 viz = VizMarkerPublisher(world=tracy_world, node=node)
+viz.with_tf_publisher()
 
 rt = RayTracer(tracy_world)
 rt.update_scene()
@@ -121,7 +122,7 @@ node.destroy_node()
 rt.update_scene()
 rt.scene.show()
 
-try:
-    rclpy.shutdown()
-except Exception:
-    pass
+#try:
+#    rclpy.shutdown()
+#except Exception:
+#    pass
