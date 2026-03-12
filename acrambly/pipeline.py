@@ -22,8 +22,8 @@ def update_obj_positions(poses: list[tuple[str, geometry_msgs.msg.PoseStamped]],
                                                                  PrefixedName(obj_pose.header.frame_id, "tracy")))
 
         with world.modify_world():
-            world.get_connection_by_name(PrefixedName("map_T_" + obj_name, prefix)).origin = world.transform(
-                obj_trans, world.get_body_by_name(PrefixedName(name='map', prefix='tracy')))
+            world.get_body_by_name(PrefixedName(obj_name, prefix)).parent_connection.origin = world.transform(
+                obj_trans, world.get_body_by_name(PrefixedName(obj_name, prefix)).parent_connection.parent)
 
 
 class PerceptionClientSingle:
