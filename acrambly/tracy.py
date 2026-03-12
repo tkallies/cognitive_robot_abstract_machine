@@ -22,14 +22,14 @@ from semantic_digital_twin.world_description.geometry import Box, Scale, Color
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
 
-perception = False
+perception = True
 
 sw = World()
 body_box1 = Body(
     name=PrefixedName("red_box", "PhysicalObject"),
 )
 body_box2 = Body(
-    name=PrefixedName("green_box", "PhysicalObject"),
+    name=PrefixedName("yellow_box", "PhysicalObject"),
 )
 body_box3 = Body(
     name=PrefixedName("blue_box", "PhysicalObject"),
@@ -70,8 +70,13 @@ with tracy_world.modify_world():
 
 if not rclpy.ok():
     rclpy.init()
+
 node = rclpy.create_node("semantic_world")
 
+viz = VizMarkerPublisher(world=tracy_world, node=node)
+viz.with_tf_publisher()
+
+client = None
 if perception:
     client = PerceptionClientSingle(tracy_world, node)
 
@@ -79,35 +84,16 @@ if perception:
     client.request(body_box2.name.name)
     client.request(body_box3.name.name)
 
-viz = VizMarkerPublisher(world=tracy_world, node=node)
-viz.with_tf_publisher()
-
-rt = RayTracer(tracy_world)
-rt.update_scene()
-rt.scene.show()
-
 with simulated_robot:
     ctx = Context(world=tracy_world, robot=robot_view)
     SequentialPlan(
         ctx,
-        ParkArmsActionDescription([Arms.BOTH]),
         StackingActionDescription(
             object_designator=body_box1,
             target=body_box2,
             arm=Arms.LEFT,
             grasp_description=GraspDescription(ApproachDirection.FRONT, VerticalAlignment.TOP,
-                                               robot_view.left_arm.manipulator))
-    ).perform()
-
-    if perception:
-        client.request(body_box2.name.name)
-        client.request(body_box3.name.name)
-
-    rt.update_scene()
-    rt.scene.show()
-
-    SequentialPlan(
-        ctx,
+                                               robot_view.left_arm.manipulator)),
         StackingActionDescription(
             object_designator=body_box3,
             target=body_box1,
@@ -118,9 +104,6 @@ with simulated_robot:
 
 print("done")
 node.destroy_node()
-
-rt.update_scene()
-rt.scene.show()
 
 try:
     rclpy.shutdown()

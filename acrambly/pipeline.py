@@ -7,10 +7,9 @@ from semantic_digital_twin.spatial_types.spatial_types import HomogeneousTransfo
 from semantic_digital_twin.world import World
 
 prefix = "PhysicalObject"
-transform = None
 
 
-def update_obj_positions(poses: list[tuple[str, geometry_msgs.msg.PoseStamped]], world: World):
+def update_obj_position(poses: list[tuple[str, geometry_msgs.msg.PoseStamped]], world: World):
     for pose in poses:
         obj_name = pose[0]
         obj_pose = pose[1]
@@ -22,8 +21,10 @@ def update_obj_positions(poses: list[tuple[str, geometry_msgs.msg.PoseStamped]],
                                                                  PrefixedName(obj_pose.header.frame_id, "tracy")))
 
         with world.modify_world():
-            world.get_body_by_name(PrefixedName(obj_name, prefix)).parent_connection.origin = world.transform(
+            transform = world.transform(
                 obj_trans, world.get_body_by_name(PrefixedName(obj_name, prefix)).parent_connection.parent)
+            connection = world.get_body_by_name(PrefixedName(obj_name, prefix)).parent_connection
+            connection.origin = transform
 
 
 class PerceptionClientSingle:
@@ -41,5 +42,5 @@ class PerceptionClientSingle:
         future = self.client.call_async(self.req)
         rclpy.spin_until_future_complete(self.node, future)
         response = future.result()
-        poses = [(obj, response.pose)]
-        update_obj_positions(poses, self.world)
+        pose = [(obj, response.pose)]
+        update_obj_position(pose, self.world)
